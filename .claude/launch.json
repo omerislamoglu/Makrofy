@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "makrofy-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/Users/omerislamoglu/makrofy", "run", "dev", "--", "--port", "5173", "--strictPort"],
+      "cwd": "/Users/omerislamoglu/makrofy",
+      "port": 5173
+    }
+  ]
+}

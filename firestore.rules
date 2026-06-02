@@ -1,0 +1,220 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ════════════════════════════════════════════════════════════════════
+    // Helper functions
+    // ════════════════════════════════════════════════════════════════════
+
+    // True when the caller is a signed-in user.
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // True when the caller's UID matches the document's owner path.
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Returns the set of field names that changed between the existing
+    // document and the incoming write.
+    function changedFields() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // True when none of the listed field names are being modified.
+    function noneChanged(fields) {
+      return !changedFields().hasAny(fields);
+    }
+
+    // Server-managed fields on the user document. These can ONLY be
+    // written by Cloud Functions (which bypass security rules via the
+    // Admin SDK). Clients must never touch them.
+    function serverManagedUserFields() {
+      return ['isPro', 'freeScansRemaining', 'scanCount'];
+    }
+
+    // Safe profile fields that users are allowed to update.
+    function allowedProfileFields() {
+      return [
+        'displayName',
+        'photoURL',
+        'dailyGoal',
+        'preferredUnits',
+        'mealReminders',
+        'onboardingCompleted',
+        'dateKey',
+        'updatedAt'
+      ];
+    }
+
+    // True when the write only touches fields in the allowed list.
+    function onlyAllowedProfileFields() {
+      return changedFields().hasOnly(allowedProfileFields());
+    }
+
+    // ── Meal validation helpers ────────────────────────────────────────
+
+    function isMealSourceValid() {
+      return request.resource.data.source in ['manual', 'ai_scan'];
+    }
+
+    function isMealTypeValid() {
+      return request.resource.data.mealType in ['breakfast', 'lunch', 'dinner', 'snack'];
+    }
+
+    function hasMealRequiredFields() {
+      return request.resource.data.keys().hasAll([
+        'userId', 'items', 'totalMacros', 'mealType', 'source', 'dateKey'
+      ]);
+    }
+
+    function mealBelongsToUser(userId) {
+      return request.resource.data.userId == userId;
+    }
+
+    // ── Custom food validation helpers ─────────────────────────────────
+
+    function hasCustomFoodRequiredFields() {
+      return request.resource.data.keys().hasAll([
+        'userId', 'name', 'nutritionPer100g', 'defaultServingSize'
+      ]);
+    }
+
+    function customFoodBelongsToUser(userId) {
+      return request.resource.data.userId == userId;
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Users — users/{userId}
+    // ════════════════════════════════════════════════════════════════════
+
+    match /users/{userId} {
+
+      // Any authenticated user can read their own document.
+      allow read: if isOwner(userId);
+
+      // Users can create their own document on first sign-in.
+      // Server-managed fields must be set to their safe defaults.
+      allow create: if isOwner(userId)
+                    && request.resource.data.isPro == false
+                    && request.resource.data.freeScansRemaining == 3
+                    && request.resource.data.scanCount == 0;
+
+      // Users can update safe profile fields only.
+      // Server-managed fields (isPro, freeScansRemaining, scanCount)
+      // are blocked — only Cloud Functions can modify them.
+      allow update: if isOwner(userId)
+                    && noneChanged(serverManagedUserFields())
+                    && onlyAllowedProfileFields();
+
+      // Users cannot delete their own document from the client.
+      // Account deletion should go through a Cloud Function that
+      // cleans up subcollections and linked data.
+      allow delete: if false;
+
+      // ── Meals — users/{userId}/meals/{mealId} ──────────────────────
+
+      match /meals/{mealId} {
+
+        // Users can read any of their own meals.
+        allow read: if isOwner(userId);
+
+        // Users can create meals.
+        // Manual meals are created client-side.
+        // AI scan meals are created by the Cloud Function (Admin SDK
+        // bypasses rules), but we validate structure either way.
+        allow create: if isOwner(userId)
+                      && hasMealRequiredFields()
+                      && mealBelongsToUser(userId)
+                      && isMealSourceValid()
+                      && isMealTypeValid();
+
+        // Users can update their own meals (e.g. editing portions).
+        // The userId and source fields cannot be changed after creation.
+        allow update: if isOwner(userId)
+                      && noneChanged(['userId', 'source', 'createdAt']);
+
+        // Users can delete their own meals.
+        allow delete: if isOwner(userId);
+      }
+
+      // ── Workout Program — users/{userId}/workoutProgram/{docId} ────
+
+      match /workoutProgram/{docId} {
+
+        // Users can read their own workout program.
+        allow read: if isOwner(userId);
+
+        // Users can create / update their own workout program.
+        allow create, update: if isOwner(userId);
+
+        // Users can delete their own workout program.
+        allow delete: if isOwner(userId);
+      }
+
+      // ── Workout Weeks — users/{userId}/workoutWeeks/{weekId} ──────
+
+      match /workoutWeeks/{weekId} {
+
+        // Users can read their own weekly workout logs.
+        allow read: if isOwner(userId);
+
+        // Users can create / update their own weekly logs.
+        allow create, update: if isOwner(userId);
+
+        // Users can delete their own weekly logs.
+        allow delete: if isOwner(userId);
+      }
+
+      // ── Custom Foods — users/{userId}/customFoods/{foodId} ─────────
+
+      match /customFoods/{foodId} {
+
+        // Users can read their own custom foods.
+        allow read: if isOwner(userId);
+
+        // Users can create custom foods with required fields.
+        allow create: if isOwner(userId)
+                      && hasCustomFoodRequiredFields()
+                      && customFoodBelongsToUser(userId);
+
+        // Users can update their own custom foods.
+        // The userId field cannot be changed.
+        allow update: if isOwner(userId)
+                      && noneChanged(['userId', 'createdAt']);
+
+        // Users can delete their own custom foods.
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Subscriptions — subscriptions/{userId}
+    //
+    // Written exclusively by trusted server functions (Cloud Functions,
+    // RevenueCat webhook, Stripe webhook). Clients can read their own
+    // subscription status but never write to it.
+    // ════════════════════════════════════════════════════════════════════
+
+    match /subscriptions/{userId} {
+
+      // Users can read their own subscription.
+      allow read: if isOwner(userId);
+
+      // All writes are blocked from the client.
+      // Cloud Functions use the Admin SDK (bypasses rules).
+      // RevenueCat/Stripe webhooks use a service account.
+      allow create, update, delete: if false;
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Catch-all: deny everything else
+    // ════════════════════════════════════════════════════════════════════
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

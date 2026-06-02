@@ -1,0 +1,163 @@
+@import "tailwindcss";
+
+:root {
+  --color-surface: #09090b;
+  --color-border: #27272a;
+
+  /* Safe area insets — populated by iOS via CSS env() */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+
+  /* Bottom nav height (fixed) + safe area */
+  --bottom-nav-height: 60px;
+  --bottom-nav-total: calc(var(--bottom-nav-height) + var(--sab));
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  /* Prevent elastic scrolling on iOS body */
+  height: 100%;
+}
+
+html, body {
+  background: #000;
+  color: #fafafa;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
+    'Helvetica Neue', 'Segoe UI', Roboto, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
+  overscroll-behavior: none;
+  /* Prevent bounce scroll on iOS — Capacitor handles scroll natively */
+  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch;
+  height: 100%;
+}
+
+/* Native-feel: remove all tap highlight and selection */
+* {
+  -webkit-tap-highlight-color: transparent;
+  /* Fast tap — removes 300ms delay on iOS */
+  touch-action: manipulation;
+}
+
+/* Prevent text selection for native app feel */
+button, a, [role="button"] {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Number inputs - no spinners */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* ── Safe Area Utility Classes ─────────────────────────────────────────── */
+
+/* Top safe area — status bar */
+.safe-area-top {
+  padding-top: var(--sat);
+}
+
+/* Bottom safe area — home bar / notch */
+.safe-area-bottom {
+  padding-bottom: var(--sab);
+}
+
+/* Page top padding — status bar + extra breathing room */
+.page-top {
+  padding-top: calc(var(--sat) + 3.5rem); /* ~56px + status bar */
+}
+
+/* Bottom nav safe area wrapper */
+.bottom-nav-safe {
+  padding-bottom: var(--sab);
+  min-height: calc(var(--bottom-nav-height) + var(--sab));
+}
+
+/* Page bottom padding accounts for bottom nav + safe area */
+.page-bottom {
+  padding-bottom: calc(var(--bottom-nav-total) + 2rem);
+}
+
+/* ── Scrollbar styling ─────────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
+/* Hide scrollbar on mobile (native feel) */
+@media (pointer: coarse) {
+  ::-webkit-scrollbar {
+    display: none;
+  }
+  * {
+    scrollbar-width: none;
+  }
+}
+
+/* Focus visible for keyboard nav */
+:focus-visible {
+  outline: 2px solid #a1a1aa;
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* ── Capacitor / iOS specific ──────────────────────────────────────────── */
+
+/* Prevent pull-to-refresh gesture */
+body {
+  overscroll-behavior-y: contain;
+}
+
+/* iOS momentum scrolling for scroll containers */
+.scroll-smooth {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Prevent content from going behind iOS home indicator during keyboard */
+.keyboard-aware {
+  transition: padding-bottom 0.25s ease;
+}
+
+/* Input focus — ensure visible above keyboard */
+input:focus,
+textarea:focus {
+  scroll-margin-bottom: 8px;
+}
+
+/* Status bar overlay compensation — when StatusBar overlays webview */
+.status-bar-overlay {
+  padding-top: var(--sat);
+}
+
+/* Active state for interactive elements — stronger visual on mobile */
+@media (pointer: coarse) {
+  .active-scale:active {
+    transform: scale(0.97);
+    transition: transform 0.1s ease;
+  }
+}
+
