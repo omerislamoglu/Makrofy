@@ -171,6 +171,8 @@ export interface AppStrings {
     confirmWord: string
     confirmPlaceholder: string
     deleteForever: string
+    deleting: string
+    deleteError: string
     giveUp: string
     nutritionDisclaimer: string
   }
@@ -184,6 +186,9 @@ export interface AppStrings {
     restore: string
     dismiss: string
     disclaimer: string
+    productsUnavailable: string
+    selectPlan: string
+    loadingPlans: string
     yearly: string
     quarterly: string
     monthly: string
@@ -201,8 +206,11 @@ export interface AppStrings {
   scanBanner: {
     usedTitle: string
     usedSubtitle: string
+    proUsedTitle: string
+    proUsedSubtitle: string
     upgradeLink: string
     remaining: (n: number) => string
+    proRemaining: (remaining: number, total: number) => string
   }
   setup: {
     // Step indicators
@@ -469,6 +477,12 @@ export interface AppStrings {
     moreItems: (n: number) => string
     aiScan: string
     manualSource: string
+    deleteConfirmTitle: string
+    deleteCancel: string
+    deleteConfirm: string
+    deleteSuccess: string
+    deleteError: string
+    deleting: string
   }
   addPage: {
     subtitle: string
@@ -494,6 +508,7 @@ export interface AppStrings {
     analysisFailed: string
     scanOpenAll: string
     scanAvailableAll: string
+    dailyQuotaExhausted: string
     scanTip: string
     scanDisclaimer: string
     // Text tab
@@ -556,6 +571,33 @@ export interface AppStrings {
     unitBottle: string
     // Search result empty
     manualEntryHint: string
+    // Additional UI strings
+    otherUnits: string
+    calShortLabel: string
+    proteinShortLabel: string
+    carbShortLabel: string
+    fatShortLabel: string
+    fiberShortLabel: string
+    cart: string
+    clearCart: string
+    saveCart: string
+    cartSummary: (count: number, kcal: number) => string
+    restaurantSaveFailed: string
+    aiExclusivePro: string
+    aiExclusiveProSub: string
+    aiQuotaRemaining: (remaining: number, total: number) => string
+    quotaExhaustedSub: string
+    paywallTitle: string
+    paywallSub: string
+    paywallButton: string
+    tipLabel: string
+    amountInputLabel: string
+    portionLabel: string
+    totalPrefix: string
+    unitInputLabel: string
+    unitAmountLabel: string
+    searchMenuIn: (name: string) => string
+    saveAllCount: (n: number) => string
   }
   common: {
     save: string

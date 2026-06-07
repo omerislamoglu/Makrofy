@@ -7,6 +7,7 @@ import {
   isProUserSync,
   purchaseSubscription,
   restorePurchase,
+  syncSubscriptionStatus,
   getOfferings,
   initRevenueCat,
   identifyUser,
@@ -34,6 +35,28 @@ export function useSubscription(userId: string | undefined) {
     async function init() {
       await initRevenueCat(userId!)
       await identifyUser(userId!)
+
+      try {
+        const sync = await syncSubscriptionStatus(userId!)
+        if (!cancelled && sync.isPro) {
+          const syncedSubscription: Subscription = {
+            id: `server_${userId}`,
+            userId: userId!,
+            plan: 'pro_yearly',
+            status: 'active',
+            platform: 'ios',
+            startedAt: new Date().toISOString(),
+            expiresAt: sync.expiresAt ?? null,
+            cancelledAt: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }
+          saveSubscription(userId!, syncedSubscription)
+          setSubscription(syncedSubscription)
+        }
+      } catch (err) {
+        console.warn('[useSubscription] Server subscription sync skipped:', err)
+      }
 
       setLoadingPackages(true)
       try {
@@ -83,7 +106,7 @@ export function useSubscription(userId: string | undefined) {
       if (!userId) return null
       const now = new Date().toISOString()
       const expiresAt = new Date()
-      const months = plan === 'pro_yearly' ? 12 : plan === 'pro_quarterly' ? 6 : 1
+      const months = plan === 'pro_yearly' ? 12 : plan === 'pro_quarterly' ? 3 : 1
       expiresAt.setMonth(expiresAt.getMonth() + months)
 
       const sub: Subscription = {

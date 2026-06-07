@@ -12,7 +12,6 @@ import {
   Zap,
   ChevronRight,
   Check,
-  Bookmark,
   Utensils,
   Flame,
   Beef,
@@ -27,12 +26,15 @@ import {
   Store,
   Search,
   Plus,
+  Minus,
   ChevronLeft,
-  SlidersHorizontal,
   Type,
   ChevronDown,
   Trash2,
   RefreshCw,
+  ShoppingCart,
+  Crown,
+  Lock,
 } from 'lucide-react'
 import { restaurants, type Restaurant, type RestaurantMenuItem } from '../data/restaurantMenus'
 import { getFoodCatalog, getPopularFoodIds } from '../data/foodCatalog'
@@ -54,16 +56,21 @@ import { useScanLimit } from '../hooks/useScanLimit'
 import { createId } from '../utils/id'
 import { createMeal } from '../services/mealService'
 import { analyzeMealImage, ScanServiceError } from '../services/scanService'
+import { compressImageForAI } from '../utils/imageCompression'
+import { getToday } from '../utils/date'
 import {
   parseNaturalLanguageInput,
   suggestMealType,
   resolveWithFood,
   resolveWithQuantity,
+  resolveWithServingAndQuantity,
   type ResolvedFoodItem,
 } from '../utils/naturalLanguageFoodParser'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import Card from '../components/ui/Card'
+import Modal from '../components/ui/Modal'
+import { useSubscription } from '../hooks/useSubscription'
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Tab type
@@ -78,24 +85,16 @@ type AddMode = 'scan' | 'manual' | 'text' | 'restaurant'
 const MAX_FILE_SIZE = 10 * 1024 * 1024
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic']
 
-function validateFile(file: File): string | null {
+function validateFile(file: File, ap: { unsupportedFormat: string; imageTooLarge: string }): string | null {
   if (!ACCEPTED_TYPES.includes(file.type) && !file.name.toLowerCase().endsWith('.heic')) {
-    return 'Desteklenmeyen format. Lütfen JPEG, PNG veya WebP kullanın.'
+    return ap.unsupportedFormat
   }
   if (file.size > MAX_FILE_SIZE) {
-    return 'Resim çok büyük. Maksimum boyut 10 MB.'
+    return ap.imageTooLarge
   }
   return null
 }
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = (e) => resolve(e.target?.result as string)
-    reader.onerror = () => reject(new Error('Dosya okunamadı'))
-    reader.readAsDataURL(file)
-  })
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MANUAL TAB — types & helpers
@@ -185,23 +184,23 @@ function parseNum(value: string): number {
   return isNaN(n) ? 0 : Math.max(0, n)
 }
 
-function validateManualForm(form: ManualEntryForm): FormErrors {
+function validateManualForm(form: ManualEntryForm, ms: { foodNameRequired: string; enterPieceCount: string; enterValidGrams: string; enterPieceGrams: string; noNutrientData: string }): FormErrors {
   const errors: FormErrors = {}
-  if (!form.foodName.trim()) errors.foodName = 'Besin adı gerekli.'
+  if (!form.foodName.trim()) errors.foodName = ms.foodNameRequired
   const qty = Number(form.quantity)
   if (!form.quantity.trim() || !Number.isFinite(qty) || qty <= 0) {
-    errors.quantity = form.entryUnit === 'adet' ? 'Adet sayısını girin.' : 'Geçerli bir gram miktarı girin.'
+    errors.quantity = form.entryUnit === 'adet' ? ms.enterPieceCount : ms.enterValidGrams
   }
   if (form.entryUnit !== 'gram' && form.entryUnit !== 'ml') {
     const amount = Number(form.amountPerUnit)
     if (!form.amountPerUnit.trim() || !Number.isFinite(amount) || amount <= 0) {
-      errors.amountPerUnit = 'Bu ölçünün gram/ml karşılığını girin.'
+      errors.amountPerUnit = ms.enterPieceGrams
     }
   }
   // Besin değerleri artık listeden seçilen besinden gelir; manuel girilmez.
   // Kalori bilgisi yoksa kullanıcıyı listeden seçmeye yönlendir.
   if (parseNum(form.caloriesPer100g) <= 0) {
-    errors.form = 'Besin değerleri bulunamadı. Lütfen aşağıdaki listeden bir besin seçin.'
+    errors.form = ms.noNutrientData
   }
   return errors
 }
@@ -215,6 +214,20 @@ function computeTotalGrams(form: ManualEntryForm): number {
 function computeEquivalentAmount(form: ManualEntryForm): number {
   if (form.entryUnit === 'gram' || form.entryUnit === 'ml') return parseNum(form.quantity)
   return parseNum(form.quantity) * parseNum(form.amountPerUnit)
+}
+
+function formatServingAmount(amount: number, unit: EntryUnit): string {
+  const suffix = unit === 'ml' || unit === 'kutu' || unit === 'sise' ? 'ml' : 'g'
+  return `${Math.round(amount)}${suffix}`
+}
+
+function hasCatalogServingAmount(food: FoodCatalogItem | null, form: ManualEntryForm): boolean {
+  if (!food || form.entryUnit === 'gram' || form.entryUnit === 'ml') return false
+  const amount = parseNum(form.amountPerUnit)
+  if (amount <= 0) return false
+  return food.servingOptions.some((serving) =>
+    serving.unitType === form.entryUnit && servingAmount(serving) === amount
+  )
 }
 
 function findServingForForm(food: FoodCatalogItem | null, form: ManualEntryForm): FoodServingOption {
@@ -352,7 +365,7 @@ function ImagePreview({
           }`}
         />
         {!analyzing && (
-          <button
+          <button type="button"
             id="remove-image-button"
             onClick={onRemove}
             className="absolute top-3 right-3 w-9 h-9 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center hover:bg-black/80 active:scale-95 transition-all"
@@ -426,30 +439,48 @@ function ScanLimitBar({ limit, isPro, onUpgrade }: { limit: ScanLimit; isPro: bo
   const { strings } = useLocale()
   const ap = strings.addPage
 
-  if (isPro) return null
   if (limit.remaining === Infinity) return null
 
   if (limit.isLimited) {
-    return (
-      <motion.button
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, delay: 0.3 }}
-        onClick={onUpgrade}
-        className="w-full bg-zinc-900 rounded-2xl px-4 py-4 border border-zinc-800/50 flex items-center justify-between hover:bg-zinc-800/80 active:scale-[0.99] transition-all duration-200"
-      >
-        <div className="flex items-center gap-3">
+    if (isPro) {
+      return (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.3 }}
+          className="w-full bg-zinc-900 rounded-2xl px-4 py-4 border border-zinc-800/50 flex items-center gap-3"
+        >
           <div className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
             <Zap size={16} className="text-white" />
           </div>
           <div className="text-left">
-            <p className="text-[13px] font-medium text-zinc-200">{ap.scanOpenAll}</p>
+            <p className="text-[13px] font-medium text-zinc-200">{ap.dailyQuotaExhausted}</p>
             <p className="text-[11px] text-zinc-500">{ap.scanAvailableAll}</p>
           </div>
+        </motion.div>
+      )
+    }
+
+  return (
+    <motion.button
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: 0.3 }}
+      onClick={onUpgrade}
+      className="w-full bg-zinc-900 rounded-2xl px-4 py-4 border border-zinc-800/50 flex items-center justify-between hover:bg-zinc-800/80 active:scale-[0.99] transition-all duration-200"
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
+          <Lock size={16} className="text-white" />
         </div>
-        <ChevronRight size={16} className="text-zinc-600" />
-      </motion.button>
-    )
+        <div className="text-left">
+          <p className="text-[13px] font-medium text-zinc-200">{ap.aiExclusivePro}</p>
+          <p className="text-[11px] text-zinc-500">{ap.aiExclusiveProSub}</p>
+        </div>
+      </div>
+      <ChevronRight size={16} className="text-zinc-600" />
+    </motion.button>
+  )
   }
 
   return (
@@ -464,7 +495,7 @@ function ScanLimitBar({ limit, isPro, onUpgrade }: { limit: ScanLimit; isPro: bo
           <Zap size={13} className="text-white" />
         </div>
         <span className="text-[13px] text-zinc-300">
-          {strings.scanBanner.remaining(limit.remaining)}
+          {isPro ? ap.aiQuotaRemaining(limit.remaining, limit.total) : strings.scanBanner.remaining(limit.remaining)}
         </span>
       </div>
       <Sparkles size={14} className="text-zinc-600" />
@@ -506,39 +537,73 @@ function MealTypeSelector({ value, onChange }: { value: MealType; onChange: (v: 
 }
 
 function UnitSelector({ value, onChange }: { value: EntryUnit; onChange: (v: EntryUnit) => void }) {
-  const units: Array<{ value: EntryUnit; label: string; icon: typeof Scale }> = [
-    { value: 'gram', label: 'Gram', icon: Scale },
-    { value: 'adet', label: 'Adet', icon: Hash },
-    { value: 'porsiyon', label: 'Porsiyon', icon: Utensils },
-    { value: 'ml', label: 'Ml', icon: Droplets },
-    { value: 'paket', label: 'Paket', icon: Bookmark },
-    { value: 'dilim', label: 'Dilim', icon: SlidersHorizontal },
-    { value: 'bar', label: 'Bar', icon: Beef },
-    { value: 'kutu', label: 'Kutu', icon: Store },
-    { value: 'sise', label: 'Şişe', icon: Droplets },
+  const { strings } = useLocale()
+  const ap = strings.addPage
+  const primaryUnits: Array<{ value: EntryUnit; label: string; icon: typeof Scale }> = [
+    { value: 'gram', label: ap.unitGram, icon: Scale },
+    { value: 'adet', label: ap.unitPiece, icon: Hash },
+    { value: 'porsiyon', label: ap.unitPortion, icon: Utensils },
+    { value: 'ml', label: ap.unitMl, icon: Droplets },
   ]
+  const secondaryUnits: Array<{ value: EntryUnit; label: string }> = [
+    { value: 'paket', label: ap.unitPacket },
+    { value: 'dilim', label: ap.unitSlice },
+    { value: 'bar', label: ap.unitBar },
+    { value: 'kutu', label: ap.unitBox },
+    { value: 'sise', label: ap.unitBottle },
+  ]
+  const isSecondaryActive = secondaryUnits.some(u => u.value === value)
+  const [showMore, setShowMore] = useState(isSecondaryActive)
+
   return (
-    <div className="grid grid-cols-3 gap-2">
-      {units.map((opt) => {
-        const isActive = value === opt.value
-        const Icon = opt.icon
-        return (
-          <button
-            key={opt.value}
-            id={`unit-${opt.value}`}
-            type="button"
-            onClick={() => onChange(opt.value)}
-            className={`
-              h-11 rounded-xl text-[12px] font-medium flex items-center justify-center gap-1.5
-              transition-all duration-200 active:scale-[0.97]
-              ${isActive ? 'bg-white text-black' : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:bg-zinc-800'}
-            `}
-          >
-            <Icon size={14} />
-            {opt.label}
-          </button>
-        )
-      })}
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        {primaryUnits.map((opt) => {
+          const isActive = value === opt.value
+          const Icon = opt.icon
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onChange(opt.value)}
+              className={`
+                flex-1 h-10 rounded-xl text-[12px] font-medium flex items-center justify-center gap-1.5
+                transition-all duration-200 active:scale-[0.97]
+                ${isActive ? 'bg-white text-black' : 'bg-zinc-900 text-zinc-400 border border-zinc-800'}
+              `}
+            >
+              <Icon size={13} />
+              {opt.label}
+            </button>
+          )
+        })}
+      </div>
+      {!showMore && !isSecondaryActive && (
+        <button type="button" onClick={() => setShowMore(true)}
+          className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors">
+          {ap.otherUnits}
+        </button>
+      )}
+      {(showMore || isSecondaryActive) && (
+        <div className="flex gap-2 flex-wrap">
+          {secondaryUnits.map((opt) => {
+            const isActive = value === opt.value
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => onChange(opt.value)}
+                className={`
+                  px-3 h-9 rounded-xl text-[11px] font-medium transition-all duration-200 active:scale-[0.97]
+                  ${isActive ? 'bg-white text-black' : 'bg-zinc-900 text-zinc-400 border border-zinc-800'}
+                `}
+              >
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -552,6 +617,8 @@ function FoodSearchResults({
   suggestions: FoodCatalogItem[]
   onSelect: (food: FoodCatalogItem) => void
 }) {
+  const { strings, locale } = useLocale()
+  const isEN = locale === 'en'
   if (query.trim().length < 2) return null
 
   return (
@@ -560,7 +627,7 @@ function FoodSearchResults({
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -8 }}
-        className="mt-2 max-h-[360px] overflow-y-auto bg-zinc-900 border border-zinc-800/70 rounded-2xl divide-y divide-zinc-800/50"
+        className="mt-2 max-h-[360px] overflow-y-auto smooth-scroll-area bg-zinc-900 border border-zinc-800/70 rounded-2xl divide-y divide-zinc-800/50"
       >
         {suggestions.length > 0 ? (
           suggestions.slice(0, 20).map((food) => (
@@ -579,14 +646,14 @@ function FoodSearchResults({
               <div className="text-right flex-shrink-0">
                 <p className="text-[12px] text-zinc-200 font-semibold tabular-nums">{food.calories} kcal</p>
                 <p className="text-[9px] text-zinc-500">
-                  P {food.protein} · K {food.carbs} · Y {food.fat}
+                  {isEN ? 'P' : 'P'} {food.protein} · {isEN ? 'C' : 'K'} {food.carbs} · {isEN ? 'F' : 'Y'} {food.fat}
                 </p>
               </div>
             </button>
           ))
         ) : (
           <div className="px-4 py-3">
-            <p className="text-[12px] text-zinc-500">Listede yoksa değerleri elle girip direkt kaydedebilirsiniz.</p>
+            <p className="text-[12px] text-zinc-500">{strings.addPage.manualEntryHint}</p>
           </div>
         )}
       </motion.div>
@@ -626,7 +693,7 @@ function SelectedFoodPanel({
         </button>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide smooth-scroll-area">
         {servings.map((serving) => {
           const isActive = activeServingLabel === serving.label
           return (
@@ -652,6 +719,8 @@ function SelectedFoodPanel({
 function LivePreviewCard({ macros, totalAmount, unit, quantity }: {
   macros: MacroNutrients; totalAmount: number; unit: EntryUnit; quantity: number
 }) {
+  const { strings } = useLocale()
+  const ap = strings.addPage
   const hasValues = macros.calories > 0 || macros.protein > 0 || macros.carbs > 0 || macros.fat > 0
   if (!hasValues) return null
 
@@ -664,7 +733,7 @@ function LivePreviewCard({ macros, totalAmount, unit, quantity }: {
     >
       <Card variant="subtle" padding="md" className="mb-5" animated={false}>
         <div className="flex items-center justify-between mb-3">
-          <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-medium">Bu porsiyon için besin değerleri</p>
+          <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-medium">{ap.portionNutrients}</p>
           {quantity > 0 && (
             <span className="text-[10px] text-zinc-400 tabular-nums">
               {quantity} {unit} · {totalAmount}{unit === 'ml' || unit === 'kutu' || unit === 'sise' ? 'ml' : 'g'}
@@ -672,11 +741,11 @@ function LivePreviewCard({ macros, totalAmount, unit, quantity }: {
           )}
         </div>
         <div className="flex justify-around text-center">
-          <PreviewStat icon={Flame} label="Kal" value={macros.calories} unit="kcal" />
-          <PreviewStat icon={Beef} label="Protein" value={macros.protein} unit="g" />
-          <PreviewStat icon={Wheat} label="Karb" value={macros.carbs} unit="g" />
-          <PreviewStat icon={Droplets} label="Yağ" value={macros.fat} unit="g" />
-          <PreviewStat icon={Leaf} label="Lif" value={macros.fiber} unit="g" />
+          <PreviewStat icon={Flame} label={ap.calShortLabel} value={macros.calories} unit="kcal" />
+          <PreviewStat icon={Beef} label={ap.proteinShortLabel} value={macros.protein} unit="g" />
+          <PreviewStat icon={Wheat} label={ap.carbShortLabel} value={macros.carbs} unit="g" />
+          <PreviewStat icon={Droplets} label={ap.fatShortLabel} value={macros.fat} unit="g" />
+          <PreviewStat icon={Leaf} label={ap.fiberShortLabel} value={macros.fiber} unit="g" />
         </div>
       </Card>
     </motion.div>
@@ -701,12 +770,12 @@ function PreviewStat({ icon: Icon, label, value, unit }: {
 // TAB SWITCHER
 // ═══════════════════════════════════════════════════════════════════════════
 
-function TabSwitcher({ mode, onChange }: { mode: AddMode; onChange: (m: AddMode) => void }) {
+function TabSwitcher({ mode, onChange, isPro }: { mode: AddMode; onChange: (m: AddMode) => void; isPro?: boolean }) {
   const { strings } = useLocale()
   return (
     <div className="flex bg-zinc-900 rounded-2xl p-1 border border-zinc-800/50 mb-6">
       {([
-        { value: 'scan' as AddMode, label: strings.add.tabScan, icon: ScanLine },
+        { value: 'scan' as AddMode, label: strings.add.tabScan, icon: ScanLine, isLocked: isPro === false },
         { value: 'text' as AddMode, label: strings.add.tabText, icon: Type },
         { value: 'manual' as AddMode, label: strings.add.tabSearch, icon: Search },
         { value: 'restaurant' as AddMode, label: strings.add.tabRestaurant, icon: Store },
@@ -714,12 +783,12 @@ function TabSwitcher({ mode, onChange }: { mode: AddMode; onChange: (m: AddMode)
         const isActive = mode === tab.value
         const Icon = tab.icon
         return (
-          <button
+          <button type="button"
             key={tab.value}
             id={`tab-${tab.value}`}
             onClick={() => onChange(tab.value)}
             className={`
-              flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl text-[11px] font-medium
+              flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl text-[11px] font-medium relative
               transition-all duration-200 active:scale-[0.98]
               ${isActive
                 ? 'bg-white text-black shadow-sm'
@@ -729,6 +798,11 @@ function TabSwitcher({ mode, onChange }: { mode: AddMode; onChange: (m: AddMode)
           >
             <Icon size={14} />
             {tab.label}
+            {tab.isLocked && (
+              <span className="absolute top-1.5 right-1.5 text-zinc-400">
+                <Lock size={10} />
+              </span>
+            )}
           </button>
         )
       })}
@@ -740,25 +814,152 @@ function TabSwitcher({ mode, onChange }: { mode: AddMode; onChange: (m: AddMode)
 // RESTAURANT TAB
 // ═══════════════════════════════════════════════════════════════════════════
 
-function RestaurantTab({ onAddItem }: { onAddItem: (item: RestaurantMenuItem, restaurantName: string) => void }) {
+interface RestaurantCartItem {
+  item: RestaurantMenuItem
+  restaurantName: string
+  restaurantLogo?: string
+  quantity: number
+}
+
+function RestaurantTab({
+  onSaveCart,
+  saving,
+}: {
+  onSaveCart: (items: RestaurantCartItem[]) => Promise<void>
+  saving: boolean
+}) {
+  const { strings } = useLocale()
+  const ap = strings.addPage
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [addedItems, setAddedItems] = useState<Set<string>>(new Set())
+  const [cart, setCart] = useState<Record<string, RestaurantCartItem>>({})
+  const [saveError, setSaveError] = useState<string | null>(null)
   const haptics = useHaptics()
 
-  const handleAddItem = (item: RestaurantMenuItem, restaurantName: string) => {
+  const cartItems = useMemo(() => Object.values(cart), [cart])
+  const cartCount = cartItems.reduce((sum, entry) => sum + entry.quantity, 0)
+  const cartMacros = useMemo(() => sumMacros(cartItems.map(({ item, quantity }) => ({
+    calories: item.calories * quantity,
+    protein: item.protein * quantity,
+    carbs: item.carbs * quantity,
+    fat: item.fat * quantity,
+    fiber: item.fiber * quantity,
+  }))), [cartItems])
+
+  const getCartKey = (restaurantName: string, item: RestaurantMenuItem) => `${restaurantName}:${item.id}`
+
+  const handleAddItem = (item: RestaurantMenuItem, restaurantName: string, restaurantLogo?: string) => {
     haptics.impactMedium()
-    setAddedItems((prev) => new Set(prev).add(item.id))
-    onAddItem(item, restaurantName)
-    // Kısa süre sonra eklendi işaretini kaldır
-    setTimeout(() => {
-      setAddedItems((prev) => {
-        const next = new Set(prev)
-        next.delete(item.id)
-        return next
-      })
-    }, 1500)
+    setSaveError(null)
+    const key = getCartKey(restaurantName, item)
+    setCart((prev) => ({
+      ...prev,
+      [key]: {
+        item,
+        restaurantName,
+        restaurantLogo,
+        quantity: (prev[key]?.quantity ?? 0) + 1,
+      },
+    }))
   }
+
+  const handleRemoveItem = (item: RestaurantMenuItem, restaurantName: string) => {
+    haptics.impactLight()
+    const key = getCartKey(restaurantName, item)
+    setCart((prev) => {
+      const current = prev[key]
+      if (!current) return prev
+      if (current.quantity <= 1) {
+        const next = { ...prev }
+        delete next[key]
+        return next
+      }
+      return {
+        ...prev,
+        [key]: { ...current, quantity: current.quantity - 1 },
+      }
+    })
+  }
+
+  const handleSaveCart = async () => {
+    if (cartItems.length === 0 || saving) return
+    setSaveError(null)
+    try {
+      await onSaveCart(cartItems)
+      setCart({})
+    } catch (error) {
+      console.error('[RESTAURANT_CART] save failed', error)
+      setSaveError(ap.restaurantSaveFailed)
+    }
+  }
+
+  const renderCart = () => (
+    <AnimatePresence>
+      {cartItems.length > 0 && (
+        <motion.div
+          key="restaurant-cart"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 10 }}
+          className="fixed left-4 right-4 z-40 mx-auto max-w-lg bg-zinc-950/95 border border-zinc-800 rounded-2xl p-4 shadow-2xl shadow-black/40 backdrop-blur"
+          style={{ bottom: 'calc(var(--bottom-nav-total) + 12px)' }}
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-9 h-9 rounded-xl bg-white text-black flex items-center justify-center">
+              <ShoppingCart size={16} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-semibold text-zinc-100">{ap.cart}</p>
+              <p className="text-[10px] text-zinc-500">
+                {ap.cartSummary(cartCount, cartMacros.calories)}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCart({})}
+              className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              {ap.clearCart}
+            </button>
+          </div>
+
+          <div className="max-h-32 overflow-y-auto smooth-scroll-area space-y-2 mb-3">
+            {cartItems.map(({ item, restaurantName, restaurantLogo, quantity }) => (
+              <div key={getCartKey(restaurantName, item)} className="flex items-center gap-2 text-[12px]">
+                {restaurantLogo && <span className="text-sm">{restaurantLogo}</span>}
+                <span className="flex-1 min-w-0 truncate text-zinc-300">{item.name}</span>
+                <span className="text-zinc-500 tabular-nums">x{quantity}</span>
+              </div>
+            ))}
+          </div>
+
+          {saveError && (
+            <p className="text-[11px] text-red-400 mb-3">{saveError}</p>
+          )}
+
+          <Button
+            id="save-restaurant-cart-button"
+            variant="primary"
+            size="lg"
+            fullWidth
+            onClick={handleSaveCart}
+            loading={saving}
+            icon={<Check size={18} />}
+          >
+            {ap.saveCart}
+          </Button>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+
+  // Dynamic spacer: base cart height (~200px) + per-item row (~28px each, max visible ~5)
+  const cartSpacerHeight = cartItems.length > 0
+    ? 200 + Math.min(cartItems.length, 5) * 28
+    : 0
+  const renderCartSpacer = () => cartItems.length > 0
+    ? <div style={{ height: cartSpacerHeight }} aria-hidden="true" />
+    : null
 
   // Restoran seçilmemişse — restoran listesi
   if (!selectedRestaurant) {
@@ -799,13 +1000,13 @@ function RestaurantTab({ onAddItem }: { onAddItem: (item: RestaurantMenuItem, re
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" />
           <input
             type="text"
-            placeholder="Tüm menülerde ara... (ör. Whopper, Latte)"
+            placeholder={ap.searchAllMenus}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-[13px] text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-600 transition-all"
           />
           {searchQuery && (
-            <button
+            <button type="button"
               onClick={() => setSearchQuery('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-zinc-800"
             >
@@ -827,11 +1028,11 @@ function RestaurantTab({ onAddItem }: { onAddItem: (item: RestaurantMenuItem, re
                 {matchedRestaurants.length > 0 && (
                   <div className="mb-5">
                     <p className="text-[11px] text-zinc-500 uppercase tracking-widest font-medium mb-3">
-                      Restoranlar
+                      {ap.restaurants}
                     </p>
                     <div className="space-y-2">
                       {matchedRestaurants.map((r) => (
-                        <button
+                        <button type="button"
                           key={r.id}
                           onClick={() => {
                             haptics.impactLight()
@@ -844,7 +1045,7 @@ function RestaurantTab({ onAddItem }: { onAddItem: (item: RestaurantMenuItem, re
                           <div className="flex-1 min-w-0 text-left">
                             <p className="text-[13px] font-medium text-zinc-100 truncate">{r.name}</p>
                             <p className="text-[10px] text-zinc-500">
-                              {r.categories.reduce((acc, c) => acc + c.items.length, 0)} ürün
+                              {ap.products(r.categories.reduce((acc, c) => acc + c.items.length, 0))}
                             </p>
                           </div>
                           <ChevronRight size={16} className="text-zinc-600 flex-shrink-0" />
@@ -858,17 +1059,18 @@ function RestaurantTab({ onAddItem }: { onAddItem: (item: RestaurantMenuItem, re
                 {allResults.length > 0 && (
                   <>
                     <p className="text-[11px] text-zinc-500 uppercase tracking-widest font-medium mb-3">
-                      {allResults.length} ürün bulundu
+                      {ap.productsFound(allResults.length)}
                     </p>
                     <div className="space-y-2">
                       {allResults.slice(0, 20).map(({ item, restaurant }) => (
                         <RestaurantMenuItemRow
-                          key={item.id}
+                          key={`${restaurant.id}-${item.id}`}
                           item={item}
                           restaurantName={restaurant.name}
                           restaurantLogo={restaurant.logo}
-                          isAdded={addedItems.has(item.id)}
-                          onAdd={() => handleAddItem(item, restaurant.name)}
+                          quantity={cart[getCartKey(restaurant.name, item)]?.quantity ?? 0}
+                          onAdd={() => handleAddItem(item, restaurant.name, restaurant.logo)}
+                          onRemove={() => handleRemoveItem(item, restaurant.name)}
                         />
                       ))}
                     </div>
@@ -877,8 +1079,8 @@ function RestaurantTab({ onAddItem }: { onAddItem: (item: RestaurantMenuItem, re
               </motion.div>
             ) : (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-8 mb-6">
-                <p className="text-zinc-500 text-sm">Sonuç bulunamadı</p>
-                <p className="text-zinc-600 text-[11px] mt-1">Farklı bir terim deneyin</p>
+                <p className="text-zinc-500 text-sm">{ap.noResults}</p>
+                <p className="text-zinc-600 text-[11px] mt-1">{ap.tryDifferent}</p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -903,12 +1105,15 @@ function RestaurantTab({ onAddItem }: { onAddItem: (item: RestaurantMenuItem, re
                 <span className="text-3xl">{r.logo}</span>
                 <span className="text-[13px] font-medium text-zinc-200">{r.name}</span>
                 <span className="text-[10px] text-zinc-500">
-                  {r.categories.reduce((acc, c) => acc + c.items.length, 0)} ürün
+                  {ap.products(r.categories.reduce((acc, c) => acc + c.items.length, 0))}
                 </span>
               </motion.button>
             ))}
           </div>
         )}
+
+        {renderCart()}
+        {renderCartSpacer()}
 
         <motion.p
           initial={{ opacity: 0 }}
@@ -916,9 +1121,9 @@ function RestaurantTab({ onAddItem }: { onAddItem: (item: RestaurantMenuItem, re
           transition={{ delay: 0.4 }}
           className="text-center text-[10px] text-zinc-600 mt-5 leading-relaxed"
         >
-          Besin değerleri restoranların resmi sitelerinden alınmıştır.
+          {ap.restaurantDisclaimer}
           <br />
-          Porsiyon boyutları bölgeye göre farklılık gösterebilir.
+          {ap.restaurantSubDisclaimer}
         </motion.p>
       </motion.div>
     )
@@ -977,13 +1182,13 @@ function RestaurantTab({ onAddItem }: { onAddItem: (item: RestaurantMenuItem, re
         <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" />
         <input
           type="text"
-          placeholder={`${selectedRestaurant.name} menüsünde ara...`}
+          placeholder={ap.searchMenuIn(selectedRestaurant.name)}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-3 text-[13px] text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-600 transition-all"
         />
         {searchQuery && (
-          <button
+          <button type="button"
             onClick={() => setSearchQuery('')}
             className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-zinc-800"
           >
@@ -1009,17 +1214,21 @@ function RestaurantTab({ onAddItem }: { onAddItem: (item: RestaurantMenuItem, re
               <RestaurantMenuItemRow
                 key={item.id}
                 item={item}
-                isAdded={addedItems.has(item.id)}
-                onAdd={() => handleAddItem(item, selectedRestaurant.name)}
+                quantity={cart[getCartKey(selectedRestaurant.name, item)]?.quantity ?? 0}
+                onAdd={() => handleAddItem(item, selectedRestaurant.name, selectedRestaurant.logo)}
+                onRemove={() => handleRemoveItem(item, selectedRestaurant.name)}
               />
             ))}
           </div>
         </motion.div>
       ))}
 
+      {renderCart()}
+      {renderCartSpacer()}
+
       {filteredCategories.length === 0 && (
         <div className="text-center py-8">
-          <p className="text-zinc-500 text-sm">Sonuç bulunamadı</p>
+          <p className="text-zinc-500 text-sm">{ap.noResults}</p>
         </div>
       )}
     </motion.div>
@@ -1030,15 +1239,19 @@ function RestaurantMenuItemRow({
   item,
   restaurantName,
   restaurantLogo,
-  isAdded,
+  quantity,
   onAdd,
+  onRemove,
 }: {
   item: RestaurantMenuItem
   restaurantName?: string
   restaurantLogo?: string
-  isAdded: boolean
+  quantity: number
   onAdd: () => void
+  onRemove: () => void
 }) {
+  const { locale } = useLocale()
+  const isEN = locale === 'en'
   return (
     <div className="flex items-center gap-3 px-4 py-3">
       <div className="flex-1 min-w-0">
@@ -1052,21 +1265,36 @@ function RestaurantMenuItemRow({
         <div className="flex gap-2.5 mt-1.5">
           <span className="text-[11px] text-zinc-300 font-semibold tabular-nums">{item.calories} kcal</span>
           <span className="text-[10px] text-zinc-500 tabular-nums">P {item.protein}g</span>
-          <span className="text-[10px] text-zinc-500 tabular-nums">K {item.carbs}g</span>
-          <span className="text-[10px] text-zinc-500 tabular-nums">Y {item.fat}g</span>
+          <span className="text-[10px] text-zinc-500 tabular-nums">{isEN ? 'C' : 'K'} {item.carbs}g</span>
+          <span className="text-[10px] text-zinc-500 tabular-nums">{isEN ? 'F' : 'Y'} {item.fat}g</span>
         </div>
       </div>
       <AnimatePresence mode="wait">
-        {isAdded ? (
+        {quantity > 0 ? (
           <motion.div
-            key="added"
-            initial={{ scale: 0 }}
+            key="quantity"
+            initial={{ scale: 0.95 }}
             animate={{ scale: 1 }}
-            exit={{ scale: 0 }}
-            transition={{ type: 'spring', stiffness: 500, damping: 20 }}
-            className="w-9 h-9 rounded-xl bg-white flex items-center justify-center"
+            exit={{ scale: 0.95, opacity: 0 }}
+            className="flex items-center gap-1"
           >
-            <Check size={16} className="text-black" strokeWidth={3} />
+            <button
+              type="button"
+              onClick={onRemove}
+              className="w-8 h-8 rounded-xl bg-zinc-800 border border-zinc-700/50 flex items-center justify-center hover:bg-zinc-700 transition-colors"
+            >
+              <Minus size={14} className="text-zinc-300" />
+            </button>
+            <span className="w-6 text-center text-[12px] text-zinc-200 font-semibold tabular-nums">
+              {quantity}
+            </span>
+            <button
+              type="button"
+              onClick={onAdd}
+              className="w-8 h-8 rounded-xl bg-white text-black flex items-center justify-center hover:bg-zinc-200 transition-colors"
+            >
+              <Plus size={14} />
+            </button>
           </motion.div>
         ) : (
           <motion.button
@@ -1108,6 +1336,9 @@ function ParsedItemCard({
   onUpdate: (index: number, updated: ResolvedFoodItem) => void
   onRemove: (index: number) => void
 }) {
+  const { strings, locale } = useLocale()
+  const ap = strings.addPage
+  const isEN = locale === 'en'
   const [expanded, setExpanded] = useState(false)
   const [editQty, setEditQty] = useState(String(item.token.quantity))
 
@@ -1144,14 +1375,14 @@ function ParsedItemCard({
             {item.match?.name ?? item.token.foodQuery}
           </p>
           <p className="text-[10px] text-zinc-500 mt-0.5">
-            {item.token.quantity} {item.token.unit ?? 'adet'} · {Math.round(item.totalGrams)}g
-            {!item.match && <span className="text-amber-400/80 ml-1">— eşleşme bulunamadı</span>}
+            {item.token.quantity} {item.token.unit ?? ap.unitPiece.toLowerCase()} · {Math.round(item.totalGrams)}g
+            {!item.match && <span className="text-amber-400/80 ml-1">— {ap.noMatch}</span>}
           </p>
         </div>
         <div className="text-right flex-shrink-0">
           <p className="text-[13px] text-zinc-200 font-semibold tabular-nums">{item.macros.calories} kcal</p>
           <p className="text-[9px] text-zinc-500 tabular-nums">
-            P{item.macros.protein} · K{item.macros.carbs} · Y{item.macros.fat}
+            {isEN ? 'P' : 'P'}{item.macros.protein} · {isEN ? 'C' : 'K'}{item.macros.carbs} · {isEN ? 'F' : 'Y'}{item.macros.fat}
           </p>
         </div>
         <ChevronDown size={14} className={`text-zinc-500 transition-transform duration-200 flex-shrink-0 ${expanded ? 'rotate-180' : ''}`} />
@@ -1170,7 +1401,7 @@ function ParsedItemCard({
             <div className="px-4 pb-4 pt-1 border-t border-zinc-800/40 space-y-3">
               {/* Quantity editor */}
               <div className="flex items-center gap-3">
-                <label className="text-[11px] text-zinc-400 w-14">Miktar</label>
+                <label className="text-[11px] text-zinc-400 w-14">{ap.quantity}</label>
                 <input
                   type="number"
                   inputMode="decimal"
@@ -1180,16 +1411,16 @@ function ParsedItemCard({
                   min={0}
                   step={0.5}
                 />
-                <span className="text-[11px] text-zinc-500 w-16">{item.token.unit ?? 'adet'}</span>
+                <span className="text-[11px] text-zinc-500 w-16">{item.token.unit ?? ap.unitPiece.toLowerCase()}</span>
               </div>
 
               {/* Alternative matches */}
               {item.alternativeMatches.length > 0 && (
                 <div>
                   <p className="text-[10px] text-zinc-400 uppercase tracking-wider font-medium mb-2">
-                    {item.match ? 'Alternatifler' : 'Olası eşleşmeler'}
+                    {item.match ? ap.alternatives : ap.possibleMatches}
                   </p>
-                  <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+                  <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide smooth-scroll-area">
                     {item.alternativeMatches.slice(0, 5).map((alt) => (
                       <button
                         key={alt.id}
@@ -1212,13 +1443,132 @@ function ParsedItemCard({
                 className="flex items-center gap-2 text-[11px] text-red-400/80 hover:text-red-400 transition-colors"
               >
                 <Trash2 size={12} />
-                Kaldır
+                {ap.remove}
               </button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
     </motion.div>
+  )
+}
+
+function itemNeedsTextClarification(item: ResolvedFoodItem): boolean {
+  if (!item.match || item.macros.calories <= 0) return false
+  if (item.token.quantityExplicit || item.token.unitExplicit) return false
+  const servingChoices = item.match.servingOptions.filter((serving) => serving.unitType !== 'gram' && serving.unitType !== 'ml')
+  return servingChoices.length > 0 || item.match.servingOptions.length > 1
+}
+
+function preferredClarificationServings(item: ResolvedFoodItem): FoodServingOption[] {
+  if (!item.match) return []
+  const nonBase = item.match.servingOptions.filter((serving) => serving.unitType !== 'gram' && serving.unitType !== 'ml')
+  const base = item.match.servingOptions.filter((serving) => serving.unitType === 'gram' || serving.unitType === 'ml')
+  return [...nonBase, ...base].slice(0, 6)
+}
+
+function ClarifyTextFoodModal({
+  item,
+  open,
+  onClose,
+  onConfirm,
+}: {
+  item: ResolvedFoodItem | null
+  open: boolean
+  onClose: () => void
+  onConfirm: (serving: FoodServingOption, quantity: number) => void
+}) {
+  const { locale } = useLocale()
+  const [quantity, setQuantity] = useState('1')
+  const servings = useMemo(() => item ? preferredClarificationServings(item) : [], [item])
+  const [selectedServingId, setSelectedServingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    setQuantity(item?.token.quantity ? String(item.token.quantity) : '1')
+    setSelectedServingId(item?.serving?.id ?? servings[0]?.id ?? null)
+  }, [item, servings])
+
+  if (!item?.match) return null
+
+  const selectedServing = servings.find((serving) => serving.id === selectedServingId) ?? servings[0] ?? item.match.defaultServing
+  const parsedQuantity = parseFloat(quantity.replace(',', '.'))
+  const canConfirm = Number.isFinite(parsedQuantity) && parsedQuantity > 0
+  const title = locale === 'en'
+    ? `How much ${item.match.name}?`
+    : `${item.match.name} ne kadar?`
+  const description = locale === 'en'
+    ? 'Pick the serving and quantity so the calories are counted correctly.'
+    : 'Kaloriyi doğru hesaplamak için servis ve miktarı seç.'
+
+  return (
+    <Modal open={open} onClose={onClose} title={title} description={description} size="md">
+      <div className="space-y-4">
+        <div>
+          <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-medium mb-2">
+            {locale === 'en' ? 'Serving' : 'Servis'}
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {servings.map((serving) => {
+              const active = selectedServing.id === serving.id
+              const amount = serving.gramEquivalent ?? serving.mlEquivalent ?? 0
+              return (
+                <button
+                  key={`${serving.id}-${serving.label}`}
+                  type="button"
+                  onClick={() => setSelectedServingId(serving.id)}
+                  className={`px-3 py-2.5 rounded-xl border text-left transition-colors ${
+                    active ? 'bg-white text-black border-white' : 'bg-zinc-950 text-zinc-300 border-zinc-800 hover:bg-zinc-800'
+                  }`}
+                >
+                  <p className="text-[12px] font-semibold truncate">{serving.label}</p>
+                  {amount > 0 && (
+                    <p className={`text-[9px] tabular-nums ${active ? 'text-black/60' : 'text-zinc-500'}`}>
+                      {amount}{serving.mlEquivalent !== undefined ? 'ml' : 'g'}
+                    </p>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-[10px] text-zinc-500 uppercase tracking-widest font-medium mb-2">
+            {locale === 'en' ? 'Quantity' : 'Adet / miktar'}
+          </label>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={quantity}
+            min={0.25}
+            step={0.5}
+            onChange={(event) => setQuantity(event.target.value)}
+            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-3 text-[14px] text-white focus:outline-none focus:border-zinc-600"
+            autoFocus
+          />
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 h-11 rounded-xl bg-zinc-800 text-zinc-300 text-[13px] font-semibold hover:bg-zinc-700 transition-colors"
+          >
+            {locale === 'en' ? 'Cancel' : 'Vazgeç'}
+          </button>
+          <button
+            type="button"
+            disabled={!canConfirm}
+            onClick={() => {
+              if (canConfirm) onConfirm(selectedServing, parsedQuantity)
+            }}
+            className="flex-1 h-11 rounded-xl bg-white text-black text-[13px] font-semibold disabled:opacity-50 transition-colors"
+          >
+            {locale === 'en' ? 'Apply' : 'Uygula'}
+          </button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -1243,6 +1593,7 @@ function TextEntryTab({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [clarifyIndex, setClarifyIndex] = useState<number | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -1279,8 +1630,16 @@ function TextEntryTab({
     debounceRef.current = setTimeout(() => {
       const result = parseNaturalLanguageInput(inputText, catalog)
       setItems(result.items)
+      const nextClarifyIndex = result.items.findIndex(itemNeedsTextClarification)
+      setClarifyIndex(nextClarifyIndex >= 0 ? nextClarifyIndex : null)
       if (result.suggestedMealType) {
         onMealTypeChange(result.suggestedMealType)
+      }
+      // Show nonsense/no-match feedback
+      if (result.nonsenseMessage) {
+        setSaveError(result.nonsenseMessage)
+      } else {
+        setSaveError(null)
       }
     }, 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
@@ -1304,6 +1663,7 @@ function TextEntryTab({
     setItems([])
     setSaveError(null)
     setSaved(false)
+    setClarifyIndex(null)
     if (textareaRef.current) {
       textareaRef.current.style.height = '120px'
     }
@@ -1317,6 +1677,12 @@ function TextEntryTab({
     const validItems = items.filter(i => i.match !== null && i.macros.calories > 0)
     if (validItems.length === 0) {
       setSaveError(strings.addPage.needMatchingFood)
+      return
+    }
+    const unresolvedIndex = items.findIndex(itemNeedsTextClarification)
+    if (unresolvedIndex >= 0) {
+      setClarifyIndex(unresolvedIndex)
+      setSaveError(null)
       return
     }
 
@@ -1357,6 +1723,26 @@ function TextEntryTab({
       setSaving(false)
     }
   }, [items, mealType, userId, inputText, haptics, onSaved])
+
+  const clarifyItem = clarifyIndex !== null && clarifyIndex >= 0 ? items[clarifyIndex] ?? null : null
+
+  const handleConfirmClarification = useCallback((serving: FoodServingOption, quantity: number) => {
+    if (clarifyIndex === null || clarifyIndex < 0) return
+    let nextClarifyIndex: number | null = null
+    setItems((prev) => {
+      const current = prev[clarifyIndex]
+      if (!current) return prev
+      const next = prev.map((item, index) =>
+        index === clarifyIndex ? resolveWithServingAndQuantity(item, serving, quantity) : item
+      )
+      const foundIndex = next.findIndex(itemNeedsTextClarification)
+      nextClarifyIndex = foundIndex >= 0 ? foundIndex : null
+      return next
+    })
+    setClarifyIndex(nextClarifyIndex)
+    setSaveError(null)
+    haptics.selectionChanged()
+  }, [clarifyIndex, haptics])
 
   return (
     <motion.div
@@ -1422,6 +1808,13 @@ function TextEntryTab({
         </div>
       </motion.div>
 
+      <ClarifyTextFoodModal
+        item={clarifyItem}
+        open={Boolean(clarifyItem && itemNeedsTextClarification(clarifyItem))}
+        onClose={() => setClarifyIndex(null)}
+        onConfirm={handleConfirmClarification}
+      />
+
       {/* Quick examples */}
       {!inputText && (
         <motion.div
@@ -1459,7 +1852,7 @@ function TextEntryTab({
           >
             <div className="flex items-center justify-between px-1 mb-1">
               <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-medium">
-                Algılanan besinler
+                {strings.addPage.detectedFoods}
               </p>
               {items.length > 1 && (
                 <button
@@ -1468,7 +1861,7 @@ function TextEntryTab({
                   className="text-[10px] text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors"
                 >
                   <RefreshCw size={10} />
-                  Temizle
+                  {strings.addPage.clear}
                 </button>
               )}
             </div>
@@ -1496,13 +1889,13 @@ function TextEntryTab({
             transition={{ duration: 0.3 }}
           >
             <Card variant="subtle" padding="md" className="mb-5" animated={false}>
-              <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-medium mb-3">Toplam besin değerleri</p>
+              <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-medium mb-3">{strings.addPage.totalNutrients}</p>
               <div className="flex justify-around text-center">
-                <PreviewStat icon={Flame} label="Kal" value={totalMacros.calories} unit="kcal" />
-                <PreviewStat icon={Beef} label="Protein" value={totalMacros.protein} unit="g" />
-                <PreviewStat icon={Wheat} label="Karb" value={totalMacros.carbs} unit="g" />
-                <PreviewStat icon={Droplets} label="Yağ" value={totalMacros.fat} unit="g" />
-                <PreviewStat icon={Leaf} label="Lif" value={totalMacros.fiber} unit="g" />
+                <PreviewStat icon={Flame} label={strings.addPage.calShortLabel} value={totalMacros.calories} unit="kcal" />
+                <PreviewStat icon={Beef} label={strings.addPage.proteinShortLabel} value={totalMacros.protein} unit="g" />
+                <PreviewStat icon={Wheat} label={strings.addPage.carbShortLabel} value={totalMacros.carbs} unit="g" />
+                <PreviewStat icon={Droplets} label={strings.addPage.fatShortLabel} value={totalMacros.fat} unit="g" />
+                <PreviewStat icon={Leaf} label={strings.addPage.fiberShortLabel} value={totalMacros.fiber} unit="g" />
               </div>
             </Card>
           </motion.div>
@@ -1534,7 +1927,7 @@ function TextEntryTab({
             <div className="bg-zinc-900 border border-red-500/20 rounded-xl px-4 py-3 flex items-center gap-3">
               <AlertCircle size={16} className="text-red-400 flex-shrink-0" />
               <p className="text-[13px] text-zinc-300 flex-1">{saveError}</p>
-              <button onClick={() => setSaveError(null)} className="p-1 rounded-lg hover:bg-zinc-800 flex-shrink-0">
+              <button type="button" onClick={() => setSaveError(null)} className="p-1 rounded-lg hover:bg-zinc-800 flex-shrink-0">
                 <X size={14} className="text-zinc-500" />
               </button>
             </div>
@@ -1578,7 +1971,7 @@ function TextEntryTab({
                   disabled={!hasValidItems}
                   icon={<Check size={18} />}
                 >
-                  {strings.add.saveAll} ({items.filter(i => i.match !== null).length} besin)
+                  {strings.add.saveAll} ({strings.addPage.saveAllCount(items.filter(i => i.match !== null).length)})
                 </Button>
               </motion.div>
             )}
@@ -1593,9 +1986,9 @@ function TextEntryTab({
         transition={{ delay: 0.4 }}
         className="text-center text-[10px] text-zinc-600 mt-5 leading-relaxed"
       >
-        Besin değerleri veritabanındaki ortalama değerlerdir.
+        {strings.addPage.nutrientDisclaimer.split('\n')[0]}
         <br />
-        Porsiyon boyutları ve pişirme yöntemine göre farklılık gösterebilir.
+        {strings.addPage.nutrientDisclaimer.split('\n')[1]}
       </motion.p>
     </motion.div>
   )
@@ -1607,19 +2000,17 @@ function TextEntryTab({
 
 export default function AddMealPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const { isPro } = useSubscription(user?.uid)
   const location = useLocation()
   const { strings, locale } = useLocale()
-  const { user } = useAuth()
-  const { limit, isPro, canScan, showPaywall, consumeScan } = useScanLimit(user?.uid)
+  const { limit, canScan, showPaywall, consumeScan } = useScanLimit(user?.uid, isPro)
   const camera = useCamera()
   const haptics = useHaptics()
 
   // ── Active tab ──
   const initialTab = (location.state as { tab?: AddMode } | null)?.tab
   const [mode, setMode] = useState<AddMode>(initialTab ?? 'scan')
-
-  // ── Restaurant save toast ──
-  const [restaurantSaved, setRestaurantSaved] = useState(false)
 
   // ══════════════════════════════════════════════════════════════════════
   // TEXT TAB STATE
@@ -1628,6 +2019,7 @@ export default function AddMealPage() {
 
   // ══════════════════════════════════════════════════════════════════════
   // SCAN STATE
+  // imagePreview: objectURL veya convertFileSrc — base64 DEĞİL
   // ══════════════════════════════════════════════════════════════════════
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
@@ -1635,11 +2027,37 @@ export default function AddMealPage() {
   const [isDragging, setIsDragging] = useState(false)
   const [gramNotes, setGramNotes] = useState('')
 
+  // Mevcut objectURL'yi takip eder (revoke için)
+  const imageObjectUrlRef = useRef<string | null>(null)
+
+  // Unmount'ta objectURL'yi temizle
+  useEffect(() => {
+    return () => {
+      if (imageObjectUrlRef.current?.startsWith('blob:')) {
+        URL.revokeObjectURL(imageObjectUrlRef.current)
+        imageObjectUrlRef.current = null
+      }
+    }
+  }, [])
+
+  /** Preview URL'yi güvenli şekilde set eder, eskiyi revoke eder. */
+  const setPreviewUrl = useCallback((url: string | null) => {
+    if (imageObjectUrlRef.current?.startsWith('blob:')) {
+      URL.revokeObjectURL(imageObjectUrlRef.current)
+    }
+    imageObjectUrlRef.current = url?.startsWith('blob:') ? url : null
+    setImagePreview(url)
+  }, [])
+
   const guardScan = useCallback((): boolean => {
     if (canScan) return true
-    navigate('/paywall')
+    if (isPro) {
+      setScanError(strings.addPage.quotaExhaustedSub)
+    } else {
+      navigate('/paywall')
+    }
     return false
-  }, [canScan, navigate])
+  }, [canScan, isPro, navigate, strings.addPage.quotaExhaustedSub])
 
   /** Capacitor Camera — fotoğraf çek */
   const handleTakePhoto = useCallback(async () => {
@@ -1649,12 +2067,13 @@ export default function AddMealPage() {
       haptics.impactMedium()
       const result = await camera.takePhoto()
       if (!result) return // kullanıcı iptal etti
-      setImagePreview(result.dataUrl)
+      // previewUrl: convertFileSrc(webPath) — büyük base64 yok
+      setPreviewUrl(result.previewUrl)
     } catch {
-      setScanError('Kamera açılamadı. Lütfen izinleri kontrol edin.')
+      setScanError(strings.addPage.cameraFailed)
       haptics.notificationError()
     }
-  }, [guardScan, camera, haptics])
+  }, [guardScan, camera, haptics, setPreviewUrl])
 
   /** Capacitor Camera — galeriden seç */
   const handlePickGallery = useCallback(async () => {
@@ -1664,28 +2083,25 @@ export default function AddMealPage() {
       haptics.impactLight()
       const result = await camera.pickFromGallery()
       if (!result) return
-      setImagePreview(result.dataUrl)
+      setPreviewUrl(result.previewUrl)
     } catch {
-      setScanError('Galeri açılamadı. Lütfen izinleri kontrol edin.')
+      setScanError(strings.addPage.galleryFailed)
       haptics.notificationError()
     }
-  }, [guardScan, camera, haptics])
+  }, [guardScan, camera, haptics, setPreviewUrl])
 
   /** Web drag & drop fallback — dosya ile de çalışır */
   const processFile = useCallback(
-    async (file: File) => {
+    (file: File) => {
       setScanError(null)
-      const validationError = validateFile(file)
+      const validationError = validateFile(file, strings.addPage)
       if (validationError) { setScanError(validationError); return }
       if (!guardScan()) return
-      try {
-        const dataUrl = await fileToDataUrl(file)
-        setImagePreview(dataUrl)
-      } catch {
-        setScanError('Resim yüklenemedi. Lütfen tekrar deneyin.')
-      }
+      // objectURL kullan — FileReader base64 yok
+      const previewUrl = URL.createObjectURL(file)
+      setPreviewUrl(previewUrl)
     },
-    [guardScan]
+    [guardScan, setPreviewUrl, strings.addPage]
   )
 
   const handleDragEnter = useCallback((e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true) }, [])
@@ -1697,8 +2113,9 @@ export default function AddMealPage() {
   }, [processFile])
 
   const removeImage = useCallback(() => {
-    setImagePreview(null); setScanError(null)
-  }, [])
+    setPreviewUrl(null)
+    setScanError(null)
+  }, [setPreviewUrl])
 
   const handleAnalyze = useCallback(async () => {
     if (!imagePreview) return
@@ -1707,21 +2124,55 @@ export default function AddMealPage() {
     setAnalyzing(true)
     haptics.impactMedium()
     try {
-      // dataUrl'dan geçici File oluştur; gerçek analiz servisi Storage'a yükleyip AI'a gönderir.
-      const blob = await (await fetch(imagePreview)).blob()
-      const file = new File([blob], 'scan.jpg', { type: blob.type || 'image/jpeg' })
-      const result = await analyzeMealImage(file, {
-        gramNotes,
-      })
+      // 1) Sıkıştır — orijinal büyük görüntü memory'den atılır
+      const compressed = await compressImageForAI(imagePreview)
+
+      if (import.meta.env.DEV) {
+        console.debug('[handleAnalyze] image compression', {
+          originalUrl: imagePreview.startsWith('blob:') ? 'objectURL' : 'dataUrl',
+          compressedSizeBytes: compressed.sizeBytes,
+          compressedWidth: compressed.width,
+          compressedHeight: compressed.height,
+          cameraResultType: 'Uri',
+        })
+      }
+
+      // 2) Sıkıştırılmış File oluştur
+      const file = new File([compressed.blob], 'scan.jpg', { type: 'image/jpeg' })
+
+      // 3) AI analizi
+      const result = await analyzeMealImage(file, { gramNotes })
       consumeScan()
       haptics.notificationSuccess()
-      navigate('/analysis', { state: { result, imagePreview, gramNotes } })
+
+      // 4) objectURL'yi temizle
+      if (imageObjectUrlRef.current?.startsWith('blob:')) {
+        URL.revokeObjectURL(imageObjectUrlRef.current)
+        imageObjectUrlRef.current = null
+      }
+
+      // 5) Sıkıştırılmış dataUrl ile navigate (orijinal büyük görüntü DEĞİL)
+      setAnalyzing(false)
+      navigate('/analysis', {
+        state: { result, imagePreview: compressed.dataUrl, gramNotes },
+      })
     } catch (err) {
-      setScanError(err instanceof ScanServiceError ? err.message : strings.addPage.analysisFailed)
+      const errMsg = err instanceof ScanServiceError
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : strings.addPage.analysisFailed
+      console.error('[handleAnalyze] CATCH', {
+        name: (err as Error)?.name,
+        message: (err as Error)?.message,
+        code: (err as ScanServiceError)?.code,
+        stack: (err as Error)?.stack,
+      })
+      setScanError(errMsg)
       setAnalyzing(false)
       haptics.notificationError()
     }
-  }, [imagePreview, guardScan, consumeScan, navigate, gramNotes, haptics])
+  }, [imagePreview, guardScan, consumeScan, navigate, gramNotes, haptics, strings.addPage.analysisFailed])
 
   // ══════════════════════════════════════════════════════════════════════
   // MANUAL STATE
@@ -1731,6 +2182,7 @@ export default function AddMealPage() {
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [restaurantSaving, setRestaurantSaving] = useState(false)
   const foodCatalog = useMemo<FoodCatalogItem[]>(() => getFoodCatalog(locale), [locale])
   const [recentIds, setRecentIds] = useState<string[]>(() => getRecentFoodIds())
   const [selectedFood, setSelectedFood] = useState<FoodCatalogItem | null>(null)
@@ -1800,6 +2252,7 @@ export default function AddMealPage() {
   )
 
   const totalEquivalentAmount = useMemo(() => computeEquivalentAmount(form), [form.amountPerUnit, form.entryUnit, form.quantity])
+  const usingCatalogServingAmount = hasCatalogServingAmount(selectedFood, form)
 
   const liveMacros: MacroNutrients = useMemo(() => {
     if (totalEquivalentAmount <= 0) return { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 }
@@ -1844,11 +2297,11 @@ export default function AddMealPage() {
       setForm(formForSave)
     }
 
-    const validationErrors = validateManualForm(formForSave)
+    const validationErrors = validateManualForm(formForSave, strings.manual)
     setFormErrors(validationErrors)
     if (Object.keys(validationErrors).length > 0) return
     if (!user?.uid) {
-      setFormErrors({ form: 'Kullanıcı oturumu bulunamadı.' })
+      setFormErrors({ form: strings.addPage.sessionNotFound })
       return
     }
 
@@ -1894,46 +2347,54 @@ export default function AddMealPage() {
     }
   }, [foodSuggestions, form, haptics, navigate, selectedFood, user?.uid])
 
-  const handleAddRestaurantItem = useCallback(
-    async (item: RestaurantMenuItem, restaurantName: string) => {
-      if (!user?.uid) return
+  const handleSaveRestaurantCart = useCallback(
+    async (cartItems: RestaurantCartItem[]) => {
+      if (!user?.uid) {
+        haptics.notificationError()
+        return
+      }
+      if (cartItems.length === 0) return
+
+      setRestaurantSaving(true)
       try {
+        const expandedItems = cartItems.flatMap(({ item, restaurantName, quantity }) =>
+          Array.from({ length: quantity }, (_, index) => ({
+            id: createId(),
+            name: quantity > 1 ? `${item.name} (${index + 1}/${quantity})` : item.name,
+            grams: item.grams ?? 1,
+            servingLabel: restaurantName,
+            selectedQuantity: 1,
+            macros: {
+              calories: item.calories,
+              protein: item.protein,
+              carbs: item.carbs,
+              fat: item.fat,
+              fiber: item.fiber,
+            },
+          }))
+        )
+        const totalMacros = sumMacros(expandedItems.map((item) => item.macros))
+        const restaurantNames = [...new Set(cartItems.map((entry) => entry.restaurantName))]
+
         await createMeal(user.uid, {
           mealType: suggestMealType(),
           source: 'manual',
-          notes: restaurantName,
-          items: [
-            {
-              id: createId(),
-              name: item.name,
-              grams: item.grams ?? 1,
-              servingLabel: restaurantName,
-              macros: {
-                calories: item.calories,
-                protein: item.protein,
-                carbs: item.carbs,
-                fat: item.fat,
-                fiber: item.fiber,
-              },
-            },
-          ],
-          totalMacros: {
-            calories: item.calories,
-            protein: item.protein,
-            carbs: item.carbs,
-            fat: item.fat,
-            fiber: item.fiber,
-          },
-          dateKey: new Date().toISOString().split('T')[0],
+          notes: restaurantNames.join(', '),
+          items: expandedItems,
+          totalMacros,
+          dateKey: getToday(),
         })
         haptics.notificationSuccess()
-        setRestaurantSaved(true)
-        setTimeout(() => setRestaurantSaved(false), 2500)
-      } catch {
+        navigate('/', { replace: true })
+      } catch (error) {
+        console.error('[RESTAURANT_CART] save failed', error)
         haptics.notificationError()
+        throw error
+      } finally {
+        setRestaurantSaving(false)
       }
     },
-    [haptics, user?.uid]
+    [haptics, navigate, user?.uid]
   )
 
   const errorCount = Object.keys(formErrors).length
@@ -1943,7 +2404,7 @@ export default function AddMealPage() {
   // ══════════════════════════════════════════════════════════════════════
 
   return (
-    <div className="px-5 pt-14 pb-8 max-w-lg mx-auto">
+    <div className="px-5 pt-14 pb-24 max-w-lg mx-auto">
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
         {/* ── Header ─────────────────────────────────────────────── */}
         <motion.div
@@ -1954,12 +2415,12 @@ export default function AddMealPage() {
         >
           <h1 className="text-[26px] font-bold tracking-tight">{strings.add.title}</h1>
           <p className="text-zinc-400 text-sm mt-1 leading-relaxed">
-            AI ile tarayın, yazarak ekleyin veya arayarak bulun.
+            {strings.addPage.subtitle}
           </p>
         </motion.div>
 
         {/* ── Tab switcher ────────────────────────────────────────── */}
-        <TabSwitcher mode={mode} onChange={setMode} />
+        <TabSwitcher mode={mode} onChange={setMode} isPro={isPro} />
 
         {/* ── SCAN TAB ────────────────────────────────────────────── */}
         <AnimatePresence mode="wait">
@@ -1978,9 +2439,17 @@ export default function AddMealPage() {
 
               {/* Paywall state */}
               {showPaywall ? (
-                <div className="bg-zinc-900/40 rounded-2xl p-8 text-center border border-zinc-800/20">
-                  <p className="text-zinc-400 text-sm mb-1">{strings.addPage.scanOpenAll}</p>
-                  <p className="text-zinc-500 text-[12px]">{strings.addPage.scanAvailableAll}</p>
+                <div className="bg-zinc-900/40 rounded-2xl p-8 text-center border border-zinc-800/20 flex flex-col items-center justify-center">
+                  <div className="w-14 h-14 bg-zinc-800/50 rounded-2xl flex items-center justify-center mb-4 border border-zinc-700/50">
+                    <Lock size={20} className="text-zinc-400" />
+                  </div>
+                  <h3 className="text-[15px] font-bold text-zinc-200 mb-2">{strings.addPage.paywallTitle}</h3>
+                  <p className="text-[12px] text-zinc-500 mb-6 leading-relaxed">
+                    {strings.addPage.paywallSub}
+                  </p>
+                  <Button variant="primary" onClick={() => navigate('/paywall')} icon={<Crown size={14} />}>
+                    {strings.addPage.paywallButton}
+                  </Button>
                 </div>
               ) : (
                 <>
@@ -1996,7 +2465,7 @@ export default function AddMealPage() {
                         <div className="bg-zinc-900 border border-red-500/20 rounded-xl px-4 py-3 flex items-start gap-3">
                           <AlertCircle size={16} className="text-red-400 flex-shrink-0 mt-0.5" />
                           <p className="text-[13px] text-zinc-200 flex-1">{scanError}</p>
-                          <button onClick={() => setScanError(null)} className="p-1 rounded-lg hover:bg-zinc-800 transition-colors flex-shrink-0">
+                          <button type="button" onClick={() => setScanError(null)} className="p-1 rounded-lg hover:bg-zinc-800 transition-colors flex-shrink-0">
                             <X size={14} className="text-zinc-500" />
                           </button>
                         </div>
@@ -2038,15 +2507,15 @@ export default function AddMealPage() {
                     className="mt-6 bg-zinc-900/50 rounded-xl px-4 py-3 border border-zinc-800/30"
                   >
                     <p className="text-[11px] text-zinc-500 text-center leading-relaxed">
-                      <span className="text-zinc-400 font-medium">İpucu:</span>{' '}
-                      Daha iyi tahminler için tabağın tamamını yukarıdan, iyi aydınlatmayla çekin. Gramajları biliyorsanız not olarak ekleyin.
+                      <span className="text-zinc-400 font-medium">{strings.addPage.tipLabel}</span>{' '}
+                      {strings.addPage.scanTip}
                     </p>
                   </motion.div>
                 </>
               )}
 
               <p className="text-center text-[10px] text-zinc-600 mt-5">
-                Sonuçlar AI tahminidir ve tam besin değerlerini yansıtmayabilir.
+                {strings.addPage.scanDisclaimer}
               </p>
             </motion.div>
           )}
@@ -2064,26 +2533,10 @@ export default function AddMealPage() {
 
           {/* ── RESTAURANT TAB ─────────────────────────────────────── */}
           {mode === 'restaurant' && (
-            <>
-              <AnimatePresence>
-                {restaurantSaved && (
-                  <motion.div
-                    key="restaurant-saved-toast"
-                    initial={{ opacity: 0, y: -8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.2 }}
-                    className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 mb-4"
-                  >
-                    <Check size={14} className="text-green-400 flex-shrink-0" />
-                    <p className="text-[13px] text-green-400 font-medium">{strings.addPage.mealAdded}</p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-              <RestaurantTab
-                onAddItem={handleAddRestaurantItem}
-              />
-            </>
+            <RestaurantTab
+              onSaveCart={handleSaveRestaurantCart}
+              saving={restaurantSaving}
+            />
           )}
 
           {/* ── MANUAL TAB (Search & Manual Entry) ────────────────── */}
@@ -2094,9 +2547,10 @@ export default function AddMealPage() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 16 }}
               transition={{ duration: 0.25 }}
+              className="space-y-4"
             >
-              {/* Search */}
-              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.03 }} className="mb-5">
+              {/* 1. Search input + results */}
+              <div>
                 <Input
                   id="food-name-input"
                   label={strings.addPage.searchFoodLabel}
@@ -2117,53 +2571,86 @@ export default function AddMealPage() {
                     onSelect={handleFoodSuggestion}
                   />
                 )}
-              </motion.div>
+              </div>
 
-              {/* Error bar */}
+              {/* 2. Selected food panel (porsiyon seçenekleri dahil) */}
+              <AnimatePresence>
+                {selectedFood && (
+                  <SelectedFoodPanel
+                    food={selectedFood}
+                    activeServingLabel={activeServingLabel}
+                    onServingSelect={handleServingSelect}
+                    onClear={() => {
+                      setSelectedFood(null)
+                      setActiveServingLabel('')
+                    }}
+                  />
+                )}
+              </AnimatePresence>
+
+              {/* 3. Error bar */}
               <AnimatePresence>
                 {submitted && errorCount > 0 && (
-                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-5 overflow-hidden">
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
                     <div className="bg-zinc-900 border border-red-500/20 rounded-xl px-4 py-3 flex items-center gap-3">
                       <AlertCircle size={16} className="text-red-400 flex-shrink-0" />
                       <p className="text-[13px] text-zinc-300">
-                        {formErrors.form ?? `Lütfen aşağıdaki ${errorCount} hatayı düzeltin.`}
+                        {formErrors.form ?? strings.addPage.fixErrors(errorCount)}
                       </p>
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
 
-              {/* Meal type */}
-              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.05 }} className="mb-6">
-                <label className="block text-[11px] text-zinc-400 uppercase tracking-wider font-medium mb-2.5">{strings.addPage.mealTypeLabel}</label>
-                <MealTypeSelector value={form.mealType} onChange={(v) => updateField('mealType', v)} />
-              </motion.div>
+              {/* 4. Miktar + birim — tek satırda kompakt */}
+              <div>
+                {form.entryUnit !== 'gram' && form.entryUnit !== 'ml' ? (
+                  usingCatalogServingAmount ? (
+                    <div className="space-y-3">
+                      <Input id="quantity-input" label={strings.addPage.amountInputLabel} type="number" placeholder="1" value={form.quantity}
+                        onChange={(e) => updateField('quantity', e.target.value)} error={formErrors.quantity}
+                        leftIcon={<Hash size={16} />} inputMode="decimal" min={0} />
+                      <div className="bg-zinc-900 border border-zinc-800/60 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">{strings.addPage.portionLabel}</p>
+                          <p className="text-[13px] text-zinc-200 mt-0.5">
+                            1 {form.entryUnit} = {formatServingAmount(parseNum(form.amountPerUnit), form.entryUnit)}
+                          </p>
+                        </div>
+                        {totalEquivalentAmount > 0 && (
+                          <span className="text-[12px] text-zinc-300 tabular-nums flex-shrink-0">
+                            {strings.addPage.totalPrefix} {formatServingAmount(totalEquivalentAmount, form.entryUnit)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input id="quantity-input" label={strings.addPage.amountInputLabel} type="number" placeholder="2" value={form.quantity}
+                        onChange={(e) => updateField('quantity', e.target.value)} error={formErrors.quantity}
+                        leftIcon={<Hash size={16} />} inputMode="decimal" min={0} />
+                      <Input id="amount-per-unit-input" label={strings.addPage.unitAmountLabel} type="number" placeholder="50"
+                        value={form.amountPerUnit} onChange={(e) => updateField('amountPerUnit', e.target.value)}
+                        error={formErrors.amountPerUnit}
+                        hint={totalEquivalentAmount > 0 ? `${strings.addPage.totalPrefix}: ${formatServingAmount(totalEquivalentAmount, form.entryUnit)}` : undefined}
+                        leftIcon={<Scale size={16} />} inputMode="decimal" min={0} />
+                    </div>
+                  )
+                ) : (
+                  <Input id="grams-input" label={form.entryUnit === 'ml' ? strings.addPage.mlLabel : strings.addPage.gramLabel} type="number" placeholder={form.entryUnit === 'ml' ? '250' : '150'}
+                    value={form.quantity} onChange={(e) => updateField('quantity', e.target.value)}
+                    error={formErrors.quantity}
+                    leftIcon={form.entryUnit === 'ml' ? <Droplets size={16} /> : <Scale size={16} />} inputMode="decimal" min={0} />
+                )}
+              </div>
 
-              {/* Selected food */}
-              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.1 }} className="mb-5">
-                <AnimatePresence>
-                  {selectedFood && (
-                    <SelectedFoodPanel
-                      food={selectedFood}
-                      activeServingLabel={activeServingLabel}
-                      onServingSelect={handleServingSelect}
-                      onClear={() => {
-                        setSelectedFood(null)
-                        setActiveServingLabel('')
-                      }}
-                    />
-                  )}
-                </AnimatePresence>
-              </motion.div>
-
-              {/* Unit selector */}
-              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.13 }} className="mb-5">
-                <label className="block text-[11px] text-zinc-400 uppercase tracking-wider font-medium mb-2.5">Giriş Birimi</label>
+              {/* 5. Birim seçici — kompakt, varsayılan gizli */}
+              <div>
+                <label className="block text-[11px] text-zinc-500 uppercase tracking-wider font-medium mb-2">{strings.addPage.unitInputLabel}</label>
                 <UnitSelector
                   value={form.entryUnit}
                   onChange={(v) => {
                     if (selectedFood) {
-                      // Seçili besinin bu birime ait porsiyon seçeneğini bul
                       const matchingServing = selectedFood.servingOptions.find(s => s.unitType === v)
                       if (matchingServing) {
                         haptics.selectionChanged()
@@ -2172,68 +2659,48 @@ export default function AddMealPage() {
                         return
                       }
                     }
-                    // Eşleşen porsiyon yok ya da besin seçilmemiş
                     setForm(prev => ({
                       ...prev,
                       entryUnit: v,
-                      // gram/ml ise miktarı sıfırla; adet/porsiyon vb. ise birim gramını sıfırla
                       quantity: v === 'gram' || v === 'ml' ? '' : '1',
                       amountPerUnit: '',
                     }))
                   }}
                 />
-              </motion.div>
+              </div>
 
-              {/* Quantity */}
-              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.15 }} className="mb-5">
-                {form.entryUnit !== 'gram' && form.entryUnit !== 'ml' ? (
-                  <div className="grid grid-cols-2 gap-3">
-                    <Input id="quantity-input" label="Miktar" type="number" placeholder="2" value={form.quantity}
-                      onChange={(e) => updateField('quantity', e.target.value)} error={formErrors.quantity}
-                      leftIcon={<Hash size={16} />} inputMode="decimal" min={0} />
-                    <Input id="amount-per-unit-input" label="Birim gram/ml" type="number" placeholder="50"
-                      value={form.amountPerUnit} onChange={(e) => updateField('amountPerUnit', e.target.value)}
-                      error={formErrors.amountPerUnit}
-                      hint={totalEquivalentAmount > 0 ? `Toplam: ${Math.round(totalEquivalentAmount)}${form.entryUnit === 'kutu' || form.entryUnit === 'sise' ? 'ml' : 'g'}` : undefined}
-                      leftIcon={<Scale size={16} />} inputMode="decimal" min={0} />
-                  </div>
-                ) : (
-                  <Input id="grams-input" label={form.entryUnit === 'ml' ? 'Mililitre' : 'Gram'} type="number" placeholder={form.entryUnit === 'ml' ? '250' : '150'}
-                    value={form.quantity} onChange={(e) => updateField('quantity', e.target.value)}
-                    error={formErrors.quantity} hint={form.entryUnit === 'ml' ? 'Ml cinsinden hacim' : 'Gram cinsinden ağırlık'}
-                    leftIcon={form.entryUnit === 'ml' ? <Droplets size={16} /> : <Scale size={16} />} inputMode="decimal" min={0} />
-                )}
-              </motion.div>
-
-              {/* Live preview */}
+              {/* 6. Live preview — sadece değer girildiğinde */}
               <AnimatePresence>
                 <LivePreviewCard macros={liveMacros} totalAmount={Math.round(totalEquivalentAmount)} unit={form.entryUnit} quantity={parseNum(form.quantity)} />
               </AnimatePresence>
 
-              {/* Save button */}
-              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.3 }}>
-                <AnimatePresence mode="wait">
-                  {saved ? (
-                    <motion.div key="saved" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="h-[52px] rounded-2xl bg-white flex items-center justify-center gap-2">
-                      <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 400, damping: 15 }}>
-                        <Check size={20} className="text-black" />
-                      </motion.div>
-                      <span className="text-black font-semibold">{strings.addPage.mealSaved}</span>
-                    </motion.div>
-                  ) : (
-                    <motion.div key="save-btn" exit={{ opacity: 0 }}>
-                      <Button id="save-meal-button" variant="primary" size="lg" fullWidth onClick={handleSave} loading={saving} icon={<Check size={18} />}>
-                        {strings.addPage.saveManual}
-                      </Button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
+              {/* 7. Öğün türü — altta kompakt */}
+              <div>
+                <label className="block text-[11px] text-zinc-500 uppercase tracking-wider font-medium mb-2">{strings.addPage.mealTypeLabel}</label>
+                <MealTypeSelector value={form.mealType} onChange={(v) => updateField('mealType', v)} />
+              </div>
 
-              <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
-                className="text-center text-[10px] text-zinc-600 mt-5 leading-relaxed">
+              {/* 8. Kaydet */}
+              <AnimatePresence mode="wait">
+                {saved ? (
+                  <motion.div key="saved" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="h-[52px] rounded-2xl bg-white flex items-center justify-center gap-2">
+                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 400, damping: 15 }}>
+                      <Check size={20} className="text-black" />
+                    </motion.div>
+                    <span className="text-black font-semibold">{strings.addPage.mealSaved}</span>
+                  </motion.div>
+                ) : (
+                  <motion.div key="save-btn" exit={{ opacity: 0 }}>
+                    <Button id="save-meal-button" variant="primary" size="lg" fullWidth onClick={handleSave} loading={saving} icon={<Check size={18} />}>
+                      {strings.addPage.saveManual}
+                    </Button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <p className="text-center text-[10px] text-zinc-600 mt-2 leading-relaxed">
                 {strings.addPage.manualDisclaimer}
-              </motion.p>
+              </p>
             </motion.div>
           )}
         </AnimatePresence>

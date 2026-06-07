@@ -177,7 +177,7 @@ function ImagePreview({
         />
 
         {!analyzing && (
-          <button
+          <button type="button"
             id="remove-image-button"
             onClick={onRemove}
             className="absolute top-3 right-3 w-9 h-9 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center hover:bg-black/80 active:scale-95 transition-all"
@@ -255,13 +255,30 @@ function ScanLimitBar({
   const { strings } = useLocale()
   const ap = strings.addPage
 
-  // Pro users see nothing
-  if (isPro) return null
   // Unlimited remaining means pro (shouldn't reach here, but guard)
   if (limit.remaining === Infinity) return null
 
   // Scans exhausted — show upgrade prompt
   if (limit.isLimited) {
+    if (isPro) {
+      return (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.3 }}
+          className="w-full bg-zinc-900 rounded-2xl px-4 py-4 border border-zinc-800/50 flex items-center gap-3"
+        >
+          <div className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
+            <Zap size={16} className="text-white" />
+          </div>
+          <div className="text-left">
+            <p className="text-[13px] font-medium text-zinc-200">{ap.dailyQuotaExhausted}</p>
+            <p className="text-[11px] text-zinc-500">{ap.scanAvailableAll}</p>
+          </div>
+        </motion.div>
+      )
+    }
+
     return (
       <motion.button
         initial={{ opacity: 0, y: 8 }}
@@ -315,7 +332,7 @@ function ScanLimitBar({
 export default function ScanPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { limit, isPro, canScan, showPaywall, consumeScan } = useScanLimit(user?.uid)
+  const { limit, isPro, canScan, showPaywall, consumeScan } = useScanLimit(user?.uid, user?.isPro)
   const { strings } = useLocale()
   const ap = strings.addPage
 
@@ -328,9 +345,13 @@ export default function ScanPage() {
   // ── Gate: check scan availability, redirect to paywall if blocked ──────
   const guardScan = useCallback((): boolean => {
     if (canScan) return true
-    navigate('/paywall')
+    if (isPro) {
+      setError(ap.quotaExhaustedSub)
+    } else {
+      navigate('/paywall')
+    }
     return false
-  }, [canScan, navigate])
+  }, [ap.quotaExhaustedSub, canScan, isPro, navigate])
 
   // ── File selection ─────────────────────────────────────────────────────
   const processFile = useCallback(
@@ -432,7 +453,6 @@ export default function ScanPage() {
     }
   }, [selectedFile, imagePreview, guardScan, consumeScan, navigate, ap])
 
-  // Legacy paywall state is kept unreachable by useScanLimit().
   if (showPaywall) {
     return (
       <div className="px-5 pt-14 pb-8 max-w-lg mx-auto">
@@ -451,7 +471,7 @@ export default function ScanPage() {
               {strings.add.tabScan}
             </h1>
             <p className="text-zinc-400 text-sm mt-1.5 leading-relaxed">
-              {ap.scanOpenAll}
+              AI analizi Pro'ya özel. Ücretsiz hesaplarda AI fotoğraf analizi hakkı yok.
             </p>
           </motion.div>
 
@@ -510,7 +530,7 @@ export default function ScanPage() {
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] text-zinc-200">{error}</p>
                 </div>
-                <button
+                <button type="button"
                   onClick={() => setError(null)}
                   className="p-1 rounded-lg hover:bg-zinc-800 transition-colors flex-shrink-0"
                 >

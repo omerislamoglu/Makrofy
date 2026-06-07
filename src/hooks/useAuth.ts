@@ -10,6 +10,7 @@ import {
   signInWithGoogle as googleSignIn,
   signInWithApple as appleSignIn,
   signOut as authSignOut,
+  deleteAccount as authDeleteAccount,
   resetPassword as authResetPassword,
   getUserProfile,
   persistUserProfile,
@@ -30,6 +31,8 @@ const DEMO_USER: UserProfile = {
   dailyGoal: { calories: 2200, protein: 150, carbs: 250, fat: 70 },
   preferredUnits: 'metric',
   mealReminders: false,
+  weeklySummary: true,
+  promoNotifs: false,
   dateKey: new Date().toISOString().split('T')[0],
   bodyMetrics: undefined,
 }
@@ -59,6 +62,17 @@ interface AuthState {
   user: UserProfile | null
   loading: boolean
   error: string | null
+}
+
+type NativeAuthUser = {
+  uid: string
+  email?: string | null
+  displayName?: string | null
+  photoUrl?: string | null
+  metadata?: {
+    creationTime?: string | number | null
+    lastSignInTime?: string | number | null
+  }
 }
 
 // ─── Shared store ────────────────────────────────────────────────────────────
@@ -104,7 +118,7 @@ function ensureInitialized() {
     // can't sync the credential (nonce mismatch), so we rely exclusively on
     // the native plugin.
     import('@capacitor-firebase/authentication').then(({ FirebaseAuthentication }) => {
-      const applyNativeUser = (nativeUser: any) => {
+      const applyNativeUser = (nativeUser: NativeAuthUser | null) => {
         clearTimeout(timeoutId)
         try {
           if (nativeUser) {
@@ -127,10 +141,11 @@ function ensureInitialized() {
           } else {
             setStore({ user: null, loading: false, error: null })
           }
-        } catch (err: any) {
-          const msg = err?.message || err?.code || String(err)
+        } catch (err: unknown) {
+          const record = err && typeof err === 'object' ? err as { message?: string; code?: string; stack?: string } : null
+          const msg = record?.message || record?.code || String(err)
           console.error('[useAuth] applyNativeUser error message:', msg)
-          console.error('[useAuth] applyNativeUser error stack:', err?.stack)
+          console.error('[useAuth] applyNativeUser error stack:', record?.stack)
           setStore({ user: null, loading: false, error: null })
         }
       }
@@ -180,7 +195,7 @@ export function useAuth() {
     try {
       await signInWithEmail(email, password)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Giriş başarısız'
+      const message = err instanceof Error ? err.message : 'Sign in failed'
       setStore({ error: message })
       throw err
     }
@@ -195,7 +210,7 @@ export function useAuth() {
     try {
       await signUpWithEmail(email, password)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Kayıt başarısız'
+      const message = err instanceof Error ? err.message : 'Sign up failed'
       setStore({ error: message })
       throw err
     }
@@ -210,7 +225,7 @@ export function useAuth() {
     try {
       await googleSignIn()
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Google ile giriş başarısız'
+      const message = err instanceof Error ? err.message : 'Google sign-in failed'
       setStore({ error: message })
       throw err
     }
@@ -225,7 +240,7 @@ export function useAuth() {
     try {
       await appleSignIn()
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Apple ile giriş başarısız'
+      const message = err instanceof Error ? err.message : 'Apple sign-in failed'
       setStore({ error: message })
       throw err
     }
@@ -236,7 +251,7 @@ export function useAuth() {
     try {
       await authResetPassword(email)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Şifre sıfırlama başarısız'
+      const message = err instanceof Error ? err.message : 'Password reset failed'
       setStore({ error: message })
       throw err
     }
@@ -248,6 +263,17 @@ export function useAuth() {
       return
     }
     await authSignOut()
+    setStore({ user: null, loading: false, error: null })
+  }, [])
+
+  const deleteAccount = useCallback(async () => {
+    if (!store.user) return
+    if (isDemoMode) {
+      setStore({ user: null, loading: false, error: null })
+      return
+    }
+    const userId = store.user.uid
+    await authDeleteAccount(userId)
     setStore({ user: null, loading: false, error: null })
   }, [])
 
@@ -271,6 +297,7 @@ export function useAuth() {
     signInWithApple,
     resetPassword,
     signOut,
+    deleteAccount,
     updateProfile,
     clearError,
   }

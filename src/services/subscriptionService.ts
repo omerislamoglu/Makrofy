@@ -1,4 +1,5 @@
-import { Subscription, SubscriptionPlan, ScanLimit, FREE_SCAN_LIMIT, PRO_DAILY_SCAN_LIMIT } from '../types/subscription'
+import { Subscription, SubscriptionPlan, ScanLimit, FREE_DAILY_SCAN_LIMIT, PRO_DAILY_SCAN_LIMIT } from '../types/subscription'
+import { getFunctions, httpsCallable } from 'firebase/functions'
 import {
   initRevenueCat,
   identifyUser,
@@ -6,12 +7,15 @@ import {
   purchasePackage,
   restorePurchases,
   getOfferings,
+  getCurrentRevenueCatAppUserId,
   isRevenueCatProductionConfigured,
   type RCPackage,
   type PurchaseResult,
 } from './revenueCatService'
+import { app, auth, isDemoMode } from './firebase'
 import { createId } from '../utils/id'
 import { Capacitor } from '@capacitor/core'
+import { getToday } from '../utils/date'
 
 // ─── Re-export RevenueCat helpers ──────────────────────────────────────────
 export { initRevenueCat, identifyUser, getOfferings }
@@ -20,8 +24,19 @@ export type { RCPackage, PurchaseResult }
 // ─── Storage keys ───────────────────────────────────────────────────────────
 
 const STORAGE_KEY = 'makrofy_subscription'
-const SCAN_COUNT_KEY = 'makrofy_scan_count'
 const DAILY_SCAN_KEY = 'makrofy_daily_scans'
+const FUNCTIONS_REGION = import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || 'us-central1'
+
+type SyncSubscriptionStatusResponse = {
+  success: boolean
+  isPro: boolean
+  source: 'users' | 'subscriptions' | 'revenuecat' | 'none'
+  expiresAt?: string | null
+}
+
+type SyncSubscriptionStatusRequest = {
+  revenueCatAppUserId?: string | null
+}
 
 // ─── Subscription CRUD ──────────────────────────────────────────────────────
 
@@ -32,6 +47,82 @@ export function getSubscription(userId: string): Subscription | null {
 
 export function saveSubscription(userId: string, subscription: Subscription): void {
   localStorage.setItem(`${STORAGE_KEY}_${userId}`, JSON.stringify(subscription))
+}
+
+export async function syncSubscriptionStatus(userId: string): Promise<SyncSubscriptionStatusResponse> {
+  if (isDemoMode || !isRevenueCatProductionConfigured()) {
+    return { success: true, isPro: getSubscription(userId)?.status === 'active', source: 'none' }
+  }
+
+  if (Capacitor.isNativePlatform()) {
+    return syncSubscriptionStatusNative()
+  }
+
+  if (!auth.currentUser) {
+    throw new Error('Please sign in to sync subscription status.')
+  }
+
+  const revenueCatAppUserId = await getCurrentRevenueCatAppUserId()
+  const sync = httpsCallable<SyncSubscriptionStatusRequest, SyncSubscriptionStatusResponse>(
+    getFunctions(app, FUNCTIONS_REGION),
+    'syncSubscriptionStatus'
+  )
+  const response = await sync({ revenueCatAppUserId })
+  return response.data
+}
+
+async function syncSubscriptionStatusNative(): Promise<SyncSubscriptionStatusResponse> {
+  const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication')
+  const [{ user }, { token }] = await Promise.all([
+    FirebaseAuthentication.getCurrentUser(),
+    FirebaseAuthentication.getIdToken({ forceRefresh: true }),
+  ])
+
+  if (!user || !token) {
+    throw new Error('Please sign in to sync subscription status.')
+  }
+
+  const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID
+  if (!projectId) {
+    throw new Error('Firebase project ID not configured.')
+  }
+
+  const endpoint = `https://${FUNCTIONS_REGION}-${projectId}.cloudfunctions.net/syncSubscriptionStatus`
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ data: { revenueCatAppUserId: await getCurrentRevenueCatAppUserId() } }),
+  })
+
+  const rawText = await response.text()
+  let payload: {
+    result?: SyncSubscriptionStatusResponse
+    error?: { message?: string; status?: string }
+  }
+
+  try {
+    payload = JSON.parse(rawText)
+  } catch {
+    throw new Error(`Subscription sync returned invalid JSON (HTTP ${response.status}).`)
+  }
+
+  if (!response.ok || payload.error || !payload.result?.isPro) {
+    throw new Error(payload.error?.message || 'Active Pro subscription could not be verified.')
+  }
+
+  return payload.result
+}
+
+async function requireServerSubscriptionSync(userId: string): Promise<void> {
+  if (!Capacitor.isNativePlatform() || !isRevenueCatProductionConfigured()) return
+
+  const status = await syncSubscriptionStatus(userId)
+  if (!status.isPro) {
+    throw new Error('Active Pro subscription could not be verified on the server.')
+  }
 }
 
 export async function isProUser(userId: string): Promise<boolean> {
@@ -64,7 +155,7 @@ export function activateSubscription(
 ): Subscription {
   const now = new Date().toISOString()
   const expiresAt = new Date()
-  const planMonths = plan === 'pro_yearly' ? 12 : plan === 'pro_quarterly' ? 6 : 1
+  const planMonths = plan === 'pro_yearly' ? 12 : plan === 'pro_quarterly' ? 3 : 1
   expiresAt.setMonth(expiresAt.getMonth() + planMonths)
 
   const subscription: Subscription = {
@@ -112,6 +203,17 @@ export async function purchaseSubscription(
   if (result.success && result.subscription) {
     // Persist locally for offline / quick access
     saveSubscription(userId, result.subscription)
+    try {
+      await requireServerSubscriptionSync(userId)
+    } catch (err) {
+      console.error('[Subscription] Server sync failed after purchase:', err)
+      return {
+        success: false,
+        isPro: false,
+        subscription: result.subscription,
+        error: err instanceof Error ? err.message : 'Pro subscription could not be verified on the server.',
+      }
+    }
   }
 
   return result
@@ -125,43 +227,47 @@ export async function restorePurchase(userId: string): Promise<PurchaseResult> {
 
   if (result.success && result.subscription) {
     saveSubscription(userId, result.subscription)
+    try {
+      await requireServerSubscriptionSync(userId)
+    } catch (err) {
+      console.error('[Subscription] Server sync failed after restore:', err)
+      return {
+        success: false,
+        isPro: false,
+        subscription: result.subscription,
+        error: err instanceof Error ? err.message : 'Pro subscription could not be verified on the server.',
+      }
+    }
   }
 
   return result
 }
 
 // ─── Scan count tracking ────────────────────────────────────────────────────
-// Client-side bookkeeping only. Real enforcement must happen server-side.
+// All users tracked via daily counter. Free = 0/day, Pro = 5/day.
 
 export function getScanCount(userId: string): number {
-  const stored = localStorage.getItem(`${SCAN_COUNT_KEY}_${userId}`)
-  return stored ? parseInt(stored, 10) : 0
+  return getDailyScanCount(userId)
 }
 
 /**
  * Record one consumed scan. Call this ONLY after a successful AI analysis.
- * Returns the updated count.
+ * Returns the updated daily count.
  */
 export function incrementScanCount(userId: string): number {
-  const current = getScanCount(userId)
-  const updated = current + 1
-  localStorage.setItem(`${SCAN_COUNT_KEY}_${userId}`, String(updated))
-
-  // Also increment daily counter for Pro users
-  incrementDailyScanCount(userId)
-
-  return updated
+  return incrementDailyScanCount(userId)
 }
 
 /** Reset scan count to zero (e.g. for a new billing cycle). */
 export function resetScanCount(userId: string): void {
-  localStorage.setItem(`${SCAN_COUNT_KEY}_${userId}`, '0')
+  const today = getTodayKey()
+  localStorage.setItem(`${DAILY_SCAN_KEY}_${userId}`, JSON.stringify({ date: today, count: 0 }))
 }
 
-// ─── Daily scan tracking (Pro users) ────────────────────────────────────────
+// ─── Daily scan tracking ────────────────────────────────────────────────────
 
 function getTodayKey(): string {
-  return new Date().toISOString().split('T')[0]
+  return getToday()
 }
 
 interface DailyScanData {
@@ -179,49 +285,47 @@ export function getDailyScanCount(userId: string): number {
   return data.count
 }
 
-function incrementDailyScanCount(userId: string): void {
+function incrementDailyScanCount(userId: string): number {
   const today = getTodayKey()
   const current = getDailyScanCount(userId)
-  const data: DailyScanData = { date: today, count: current + 1 }
+  const updated = current + 1
+  const data: DailyScanData = { date: today, count: updated }
   localStorage.setItem(`${DAILY_SCAN_KEY}_${userId}`, JSON.stringify(data))
+  return updated
 }
 
 export function getDailyScansRemaining(userId: string): number {
   const isPro = isProUserSync(userId)
-  if (!isPro) return Infinity
   const used = getDailyScanCount(userId)
-  return Math.max(0, PRO_DAILY_SCAN_LIMIT - used)
+  return Math.max(0, (isPro ? PRO_DAILY_SCAN_LIMIT : FREE_DAILY_SCAN_LIMIT) - used)
 }
 
 /** Get the number of free scans remaining for a user. */
 export function getFreeScansRemaining(userId: string): number {
-  const isPro = isProUserSync(userId)
-  if (isPro) return Infinity
-  const used = getScanCount(userId)
-  return Math.max(0, FREE_SCAN_LIMIT - used)
+  const used = getDailyScanCount(userId)
+  return Math.max(0, FREE_DAILY_SCAN_LIMIT - used)
 }
 
 // ─── Composite helpers ──────────────────────────────────────────────────────
 
 export function getScanLimit(userId: string): ScanLimit {
   const isPro = isProUserSync(userId)
-  const used = getScanCount(userId)
+  const dailyUsed = getDailyScanCount(userId)
 
   if (isPro) {
-    const dailyUsed = getDailyScanCount(userId)
-    const dailyRemaining = Math.max(0, PRO_DAILY_SCAN_LIMIT - dailyUsed)
+    const remaining = Math.max(0, PRO_DAILY_SCAN_LIMIT - dailyUsed)
     return {
       used: dailyUsed,
       total: PRO_DAILY_SCAN_LIMIT,
-      remaining: dailyRemaining,
-      isLimited: dailyRemaining <= 0,
+      remaining,
+      isLimited: remaining <= 0,
     }
   }
 
-  const remaining = Math.max(0, FREE_SCAN_LIMIT - used)
+  const remaining = Math.max(0, FREE_DAILY_SCAN_LIMIT - dailyUsed)
   return {
-    used,
-    total: FREE_SCAN_LIMIT,
+    used: dailyUsed,
+    total: FREE_DAILY_SCAN_LIMIT,
     remaining,
     isLimited: remaining <= 0,
   }

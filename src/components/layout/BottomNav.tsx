@@ -45,9 +45,9 @@ export default function BottomNav() {
               <motion.button
                 key={path}
                 onClick={() => handleNavPress(path)}
-                whileTap={{ scale: 0.85 }}
-                transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-                className="relative flex flex-col items-center justify-center w-14 h-12 rounded-xl"
+                whileTap={{ scale: 0.96 }}
+                transition={{ duration: 0.06, ease: 'easeOut' }}
+                className="relative flex flex-col items-center justify-center w-14 h-12 rounded-xl touch-manipulation select-none"
               >
                 {isActive && (
                   <motion.div
@@ -57,8 +57,8 @@ export default function BottomNav() {
                   />
                 )}
                 <motion.div
-                  animate={isActive ? { scale: [1, 1.2, 1], y: [0, -2, 0] } : { scale: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: 'easeOut' }}
+                  animate={isActive ? { scale: 1.05, y: -1 } : { scale: 1, y: 0 }}
+                  transition={{ duration: 0.1, ease: 'easeOut' }}
                 >
                   <Icon
                     size={21}

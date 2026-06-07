@@ -1532,7 +1532,7 @@ function TabSwitcher({ mode, onChange }: { mode: FitnessTab; onChange: (m: Fitne
         const isActive = mode === tab.value
         const Icon = tab.icon
         return (
-          <button
+          <button type="button"
             key={tab.value}
             id={`fitness-tab-${tab.value}`}
             onClick={() => { haptics.selectionChanged(); onChange(tab.value) }}
@@ -1577,7 +1577,7 @@ function ExerciseCard({ exercise }: { exercise: Exercise }) {
       animate={{ opacity: 1, y: 0 }}
       className="bg-zinc-900 rounded-2xl border border-zinc-800/50 overflow-hidden"
     >
-      <button
+      <button type="button"
         onClick={() => setExpanded((v) => !v)}
         className="w-full p-4 flex items-center gap-3 active:bg-zinc-800/40 transition-colors text-left"
       >
@@ -1738,7 +1738,7 @@ function DietCard({ diet }: { diet: Diet }) {
       animate={{ opacity: 1, y: 0 }}
       className="bg-zinc-900 rounded-2xl border border-zinc-800/50 overflow-hidden"
     >
-      <button
+      <button type="button"
         onClick={() => setExpanded((v) => !v)}
         className="w-full p-4 flex items-center gap-3 active:bg-zinc-800/40 transition-colors text-left"
       >
@@ -1905,7 +1905,7 @@ function ProgramCard({ program, recommended }: { program: WorkoutProgram; recomm
       animate={{ opacity: 1, y: 0 }}
       className={`bg-zinc-900 rounded-2xl border overflow-hidden ${recommended ? 'border-amber-500/30' : 'border-zinc-800/50'}`}
     >
-      <button
+      <button type="button"
         onClick={() => setExpanded((v) => !v)}
         className="w-full p-4 flex items-center gap-3 active:bg-zinc-800/40 transition-colors text-left"
       >
@@ -2055,11 +2055,13 @@ function goalToProgramGoal(goal: FitnessGoal): ProgramGoal {
 function PersonalPlanCard({
   profile,
   customProgram,
+  customDiet,
   onViewDiet,
   onViewProgram,
 }: {
   profile: UserProfile
   customProgram?: WorkoutProgram | null
+  customDiet?: Diet | null
   onViewDiet: () => void
   onViewProgram: () => void
 }) {
@@ -2076,8 +2078,8 @@ function PersonalPlanCard({
     strings.setup.maintain
   const target = profile.dailyGoal
   const activeDietsForPersonal = locale === 'en' ? DIETS_EN : DIETS
-  const recommendedDiet = pickRecommendedDiet(goal, target.calories, activeDietsForPersonal)
-  const recommendedProgram = customProgram ?? getProgramForGoal(goalToProgramGoal(goal), locale)
+  const displayedDiet = customDiet ?? pickRecommendedDiet(goal, target.calories, activeDietsForPersonal)
+  const displayedProgram = customProgram ?? getProgramForGoal(goalToProgramGoal(goal), locale)
 
   return (
     <motion.div
@@ -2130,18 +2132,18 @@ function PersonalPlanCard({
         </div>
       </div>
 
-      {/* Recommended diet */}
-      <button
+      {/* Recommended or Custom diet */}
+      <button type="button"
         onClick={() => { haptics.selectionChanged(); onViewDiet() }}
         className="w-full px-4 pb-2.5 text-left active:opacity-80 transition-opacity"
       >
         <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-medium mb-2 flex items-center gap-1.5">
-          <Salad size={11} /> {f.recommendedDiet}
+          <Salad size={11} /> {customDiet ? f.yourDietPlan : f.recommendedDiet}
         </p>
         <div className="bg-zinc-900/70 rounded-xl px-3 py-2.5 flex items-center gap-2.5">
           <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-semibold text-zinc-100 truncate">{recommendedDiet.name}</p>
-            <p className="text-[11px] text-zinc-500 tabular-nums">{recommendedDiet.dailyCalories} · {recommendedDiet.duration}</p>
+            <p className="text-[13px] font-semibold text-zinc-100 truncate">{displayedDiet.name}</p>
+            <p className="text-[11px] text-zinc-500 tabular-nums">{displayedDiet.dailyCalories} · {displayedDiet.duration}</p>
           </div>
           <span className="text-[11px] font-medium text-amber-300 flex items-center gap-1 flex-shrink-0">
             {f.viewPlan} <ArrowRight size={13} />
@@ -2149,18 +2151,18 @@ function PersonalPlanCard({
         </div>
       </button>
 
-      {/* Recommended training program */}
-      <button
+      {/* Recommended or Custom training program */}
+      <button type="button"
         onClick={() => { haptics.selectionChanged(); onViewProgram() }}
         className="w-full px-4 pb-4 text-left active:opacity-80 transition-opacity"
       >
         <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-medium mb-2 flex items-center gap-1.5">
-          <ClipboardList size={11} /> {f.recommendedProgram}
+          <ClipboardList size={11} /> {customProgram ? f.yourProgram : f.recommendedProgram}
         </p>
         <div className="bg-zinc-900/70 rounded-xl px-3 py-2.5 flex items-center gap-2.5">
           <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-semibold text-zinc-100 truncate">{recommendedProgram.name}</p>
-            <p className="text-[11px] text-zinc-500">{recommendedProgram.level} · {recommendedProgram.daysPerWeek} {f.perWeek} · {recommendedProgram.split}</p>
+            <p className="text-[13px] font-semibold text-zinc-100 truncate">{displayedProgram.name}</p>
+            <p className="text-[11px] text-zinc-500">{displayedProgram.level} · {displayedProgram.daysPerWeek} {f.perWeek} · {displayedProgram.split}</p>
           </div>
           <span className="text-[11px] font-medium text-amber-300 flex items-center gap-1 flex-shrink-0">
             {f.viewProgram} <ArrowRight size={13} />
@@ -2280,6 +2282,7 @@ export default function FitnessPage() {
           <PersonalPlanCard
             profile={user}
             customProgram={customProgram}
+            customDiet={customDiet}
             onViewDiet={() => setMode('diets')}
             onViewProgram={() => setMode('programs')}
           />
@@ -2315,7 +2318,7 @@ export default function FitnessPage() {
                           <h2 className="text-[13px] font-semibold text-amber-300 uppercase tracking-wider">{strings.fitness.yourProgram}</h2>
                         </div>
                         <ProgramCard program={customProgram} recommended />
-                        <button
+                        <button type="button"
                           onClick={() => setSurveyOpen(true)}
                           className="w-full mt-2.5 bg-zinc-900 border border-zinc-800/50 rounded-xl py-3 text-[12px] font-medium text-zinc-300 active:scale-[0.99] transition-transform flex items-center justify-center gap-2"
                         >
@@ -2323,7 +2326,7 @@ export default function FitnessPage() {
                         </button>
                       </div>
                     ) : (
-                      <button
+                      <button type="button"
                         onClick={() => setSurveyOpen(true)}
                         className="w-full rounded-2xl border border-amber-500/25 bg-gradient-to-br from-amber-500/[0.08] to-zinc-900 p-4 flex items-center gap-3 text-left active:scale-[0.99] transition-transform"
                       >
@@ -2482,7 +2485,7 @@ export default function FitnessPage() {
                           <h2 className="text-[13px] font-semibold text-emerald-300 uppercase tracking-wider">{strings.fitness.yourDietPlan}</h2>
                         </div>
                         <DietCard diet={customDiet} />
-                        <button
+                        <button type="button"
                           onClick={() => setDietSurveyOpen(true)}
                           className="w-full mt-2.5 bg-zinc-900 border border-zinc-800/50 rounded-xl py-3 text-[12px] font-medium text-zinc-300 active:scale-[0.99] transition-transform flex items-center justify-center gap-2"
                         >
@@ -2490,7 +2493,7 @@ export default function FitnessPage() {
                         </button>
                       </div>
                     ) : (
-                      <button
+                      <button type="button"
                         onClick={() => setDietSurveyOpen(true)}
                         className="w-full rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/[0.08] to-zinc-900 p-4 flex items-center gap-3 text-left active:scale-[0.99] transition-transform"
                       >

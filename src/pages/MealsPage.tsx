@@ -33,7 +33,7 @@ function resolveTimestamp(ts: unknown): string {
 
 // ─── Alt bileşenler ────────────────────────────────────────────────────────
 
-function MacroStat({ label, value, unit: _unit = 'g' }: { label: string; value: number; unit?: string }) {
+function MacroStat({ label, value }: { label: string; value: number; unit?: string }) {
   return (
     <div className="flex flex-col items-center">
       <span className="text-base font-bold tabular-nums">{Math.round(value)}</span>
@@ -99,7 +99,7 @@ function MealCardItem({ meal, onEdit, onDelete, animationDelay = 0 }: MealCardIt
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-lg font-bold tabular-nums">
-            {meal.totalMacros.calories}
+            {meal.totalMacros?.calories ?? 0}
           </span>
           <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-medium">
             kcal
@@ -129,24 +129,24 @@ function MealCardItem({ meal, onEdit, onDelete, animationDelay = 0 }: MealCardIt
       {/* Alt: makrolar + işlemler */}
       <div className="flex items-center justify-between pt-3 border-t border-zinc-800/40">
         <div className="flex gap-3">
-          <MacroLabel label="P" value={meal.totalMacros.protein} />
-          <MacroLabel label="C" value={meal.totalMacros.carbs} />
-          <MacroLabel label="F" value={Math.round(meal.totalMacros.fat)} />
-          <MacroLabel label="Fi" value={meal.totalMacros.fiber} />
+          <MacroLabel label="P" value={meal.totalMacros?.protein ?? 0} />
+          <MacroLabel label="C" value={meal.totalMacros?.carbs ?? 0} />
+          <MacroLabel label="F" value={Math.round(meal.totalMacros?.fat ?? 0)} />
+          <MacroLabel label="Fi" value={meal.totalMacros?.fiber ?? 0} />
         </div>
 
         <div className="flex items-center gap-1">
-          <button
+          <button type="button"
             onClick={() => onEdit(meal.id)}
             className="p-1.5 rounded-lg hover:bg-zinc-800 active:bg-zinc-700 transition-colors"
-            aria-label="Düzenle"
+            aria-label={strings.common.edit}
           >
             <PenLine size={14} className="text-zinc-600 hover:text-zinc-400 transition-colors" />
           </button>
-          <button
+          <button type="button"
             onClick={() => onDelete(meal.id)}
             className="p-1.5 rounded-lg hover:bg-zinc-800 active:bg-zinc-700 transition-colors"
-            aria-label="Sil"
+            aria-label={strings.common.delete}
           >
             <Trash2 size={14} className="text-zinc-600 hover:text-zinc-400 transition-colors" />
           </button>
@@ -175,14 +175,31 @@ export default function MealsPage() {
   const [editingMeal, setEditingMeal] = useState<Meal | null>(null)
   const [editItems, setEditItems] = useState<{ id: string; name: string; grams: number; originalGrams: number }[]>([])
   const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState(false)
+  const [showDeleteToast, setShowDeleteToast] = useState(false)
 
   const handleDelete = async (id: string) => {
-    await deleteMeal(id)
+    if (deletingId) return
+    setDeletingId(id)
+    setDeleteError(false)
+    try {
+      await deleteMeal(id)
+      setShowDeleteToast(true)
+      setTimeout(() => setShowDeleteToast(false), 2000)
+    } catch {
+      setDeleteError(true)
+      setTimeout(() => setDeleteError(false), 3000)
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   const handleEdit = (id: string) => {
     const meal = meals.find((m) => m.id === id)
     if (!meal) return
+    setEditError(null)
     setEditingMeal(meal)
     setEditItems(meal.items.map((item) => ({
       id: item.id,
@@ -194,6 +211,7 @@ export default function MealsPage() {
 
   const handleEditSave = async () => {
     if (!editingMeal || !user?.uid) return
+    setEditError(null)
     setEditSaving(true)
     try {
       const updatedItems: FoodItem[] = editingMeal.items.map((item) => {
@@ -216,7 +234,7 @@ export default function MealsPage() {
       await refresh()
       setEditingMeal(null)
     } catch {
-      alert(ml.updateFailed)
+      setEditError(ml.updateFailed)
     } finally {
       setEditSaving(false)
     }
@@ -349,7 +367,7 @@ export default function MealsPage() {
             >
               <div className="flex items-center justify-between mb-5">
                 <h3 className="text-lg font-bold">{ml.editMeal}</h3>
-                <button
+                <button type="button"
                   onClick={() => setEditingMeal(null)}
                   className="p-1.5 rounded-lg hover:bg-zinc-800 transition-colors"
                 >
@@ -357,12 +375,12 @@ export default function MealsPage() {
                 </button>
               </div>
 
-              <div className="space-y-4 max-h-[50vh] overflow-y-auto">
+              <div className="space-y-4 max-h-[50vh] overflow-y-auto smooth-scroll-area">
                 {editItems.map((item, idx) => (
                   <div key={item.id} className="bg-zinc-800/50 rounded-xl p-3">
                     <p className="text-[13px] text-zinc-200 mb-2 truncate">{item.name}</p>
                     <div className="flex items-center gap-3">
-                      <button
+                      <button type="button"
                         onClick={() => {
                           const newItems = [...editItems]
                           newItems[idx] = { ...item, grams: Math.max(1, item.grams - 10) }
@@ -384,7 +402,7 @@ export default function MealsPage() {
                         className="w-20 text-center bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-sm text-zinc-200 tabular-nums"
                       />
                       <span className="text-[12px] text-zinc-500">g</span>
-                      <button
+                      <button type="button"
                         onClick={() => {
                           const newItems = [...editItems]
                           newItems[idx] = { ...item, grams: item.grams + 10 }
@@ -399,7 +417,13 @@ export default function MealsPage() {
                 ))}
               </div>
 
-              <button
+              {editError && (
+                <p className="mt-4 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2 text-[12px] text-red-300">
+                  {editError}
+                </p>
+              )}
+
+              <button type="button"
                 onClick={handleEditSave}
                 disabled={editSaving}
                 className="w-full mt-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold text-sm transition-colors"
@@ -407,6 +431,34 @@ export default function MealsPage() {
                 {editSaving ? ml.saving : ml.saveButton}
               </button>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Silme toast'ları ──────────────────────────────────── */}
+      <AnimatePresence>
+        {showDeleteToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 40 }}
+            className="fixed bottom-24 inset-x-0 z-50 flex justify-center pointer-events-none"
+          >
+            <p className="bg-emerald-600 text-white text-[13px] font-medium px-4 py-2.5 rounded-xl shadow-lg">
+              {ml.deleteSuccess}
+            </p>
+          </motion.div>
+        )}
+        {deleteError && (
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 40 }}
+            className="fixed bottom-24 inset-x-0 z-50 flex justify-center pointer-events-none"
+          >
+            <p className="bg-red-600 text-white text-[13px] font-medium px-4 py-2.5 rounded-xl shadow-lg">
+              {ml.deleteError}
+            </p>
           </motion.div>
         )}
       </AnimatePresence>

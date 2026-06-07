@@ -13,7 +13,7 @@ export default function Spinner({ size = 'md' }: SpinnerProps) {
     <div
       className={`${styles[size]} border-white/80 border-t-transparent rounded-full animate-spin`}
       role="status"
-      aria-label="Yükleniyor"
+      aria-label="Loading"
     />
   )
 }

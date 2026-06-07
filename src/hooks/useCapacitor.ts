@@ -20,67 +20,56 @@ export { isNative, isIOS, isAndroid, platform }
 
 // ── Haptics ───────────────────────────────────────────────────────────────────
 
+let lastHapticAt = 0
+
+function runHaptic(action: () => Promise<void>) {
+  if (!isNative) return
+  const now = Date.now()
+  if (now - lastHapticAt < 80) return
+  lastHapticAt = now
+  void action().catch(() => {
+    // Haptics desteklenmiyor, sessizce devam et
+  })
+}
+
 /**
  * Dokunsal geri bildirim (titreşim) fonksiyonları.
  * Web'de no-op, native'de Taptic Engine kullanır.
  */
 export function useHaptics() {
   /** Hafif tıklama hissi — tab geçişi, kart genişletme */
-  const impactLight = useCallback(async () => {
-    if (!isNative) return
-    try {
-      await Haptics.impact({ style: ImpactStyle.Light })
-    } catch {
-      // Haptics desteklenmiyor, sessizce devam et
-    }
+  const impactLight = useCallback(() => {
+    runHaptic(() => Haptics.impact({ style: ImpactStyle.Light }))
   }, [])
 
   /** Orta tıklama hissi — buton tıklama */
-  const impactMedium = useCallback(async () => {
-    if (!isNative) return
-    try {
-      await Haptics.impact({ style: ImpactStyle.Medium })
-    } catch { /* intentional */ }
+  const impactMedium = useCallback(() => {
+    runHaptic(() => Haptics.impact({ style: ImpactStyle.Medium }))
   }, [])
 
   /** Güçlü tıklama — hata veya önemli aksiyon */
-  const impactHeavy = useCallback(async () => {
-    if (!isNative) return
-    try {
-      await Haptics.impact({ style: ImpactStyle.Heavy })
-    } catch { /* intentional */ }
+  const impactHeavy = useCallback(() => {
+    runHaptic(() => Haptics.impact({ style: ImpactStyle.Heavy }))
   }, [])
 
   /** Başarı bildirimi — öğün kaydedildi, analiz tamamlandı */
-  const notificationSuccess = useCallback(async () => {
-    if (!isNative) return
-    try {
-      await Haptics.notification({ type: NotificationType.Success })
-    } catch { /* intentional */ }
+  const notificationSuccess = useCallback(() => {
+    runHaptic(() => Haptics.notification({ type: NotificationType.Success }))
   }, [])
 
   /** Hata bildirimi — form hatası, analiz başarısız */
-  const notificationError = useCallback(async () => {
-    if (!isNative) return
-    try {
-      await Haptics.notification({ type: NotificationType.Error })
-    } catch { /* intentional */ }
+  const notificationError = useCallback(() => {
+    runHaptic(() => Haptics.notification({ type: NotificationType.Error }))
   }, [])
 
   /** Uyarı bildirimi */
-  const notificationWarning = useCallback(async () => {
-    if (!isNative) return
-    try {
-      await Haptics.notification({ type: NotificationType.Warning })
-    } catch { /* intentional */ }
+  const notificationWarning = useCallback(() => {
+    runHaptic(() => Haptics.notification({ type: NotificationType.Warning }))
   }, [])
 
   /** Seçim değişikliği — list scroll, toggle */
-  const selectionChanged = useCallback(async () => {
-    if (!isNative) return
-    try {
-      await Haptics.selectionChanged()
-    } catch { /* intentional */ }
+  const selectionChanged = useCallback(() => {
+    runHaptic(() => Haptics.selectionChanged())
   }, [])
 
   return useMemo(() => ({

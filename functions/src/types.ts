@@ -94,7 +94,10 @@ export interface MealDocument {
 // ─── Request / Response ─────────────────────────────────────────────────────
 
 export interface AnalyzeMealRequest {
-  imageUrl: string;
+  /** HTTPS or gs:// URL — used by web path */
+  imageUrl?: string;
+  /** Base64 data URL (data:image/jpeg;base64,...) — used by native iOS path */
+  imageData?: string;
   mealTypeHint?: MealType;
   gramNotes?: string;
   dateKey?: string;
@@ -102,7 +105,6 @@ export interface AnalyzeMealRequest {
 
 export interface AnalyzeMealResponse {
   success: boolean;
-  mealId: string;
   analysis: AIAnalysisResult;
 }
 

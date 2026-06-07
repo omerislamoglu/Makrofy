@@ -467,7 +467,7 @@ export default function GoalSetupPage() {
             {/* ══ Step 4: Summary ════════════════════════════════════════ */}
             {step === 4 && (
               <div
-                className="px-5 pb-8 overflow-y-auto"
+                className="px-5 pb-8 overflow-y-auto smooth-scroll-area"
                 style={{ maxHeight: 'calc(100dvh - 120px)' }}
               >
                 <div className="mb-6">
@@ -487,7 +487,7 @@ export default function GoalSetupPage() {
                   </p>
                   <div className="flex items-end gap-1.5 mb-4">
                     <span className="text-[42px] font-bold tabular-nums leading-none">{dailyGoal.calories}</span>
-                    <span className="text-[15px] text-zinc-500 mb-1.5">kcal / gün</span>
+                    <span className="text-[15px] text-zinc-500 mb-1.5">{strings.fitness.perDay}</span>
                   </div>
                   <div className="flex gap-2">
                     <MacroPill

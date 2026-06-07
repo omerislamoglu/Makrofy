@@ -12,18 +12,28 @@ export const GLOBAL_RESTAURANT_ITEMS: FoodCatalogItem[] = [
   food({ id: 'gr-mcd-fries', name: "McDonald's Fries (Medium)", brand: "McDonald's", cat: 'Fast Food', sub: 'Sides', cal: 312, p: 3.4, c: 41, f: 15, fib: 3.8, servings: [S.g100, S.custom('1 serving', 'porsiyon', 117)], aliases: ['mcdonalds fries', 'mcd fries', 'medium fries'] }),
   food({ id: 'gr-mcd-filet-o-fish', name: 'Filet-O-Fish', brand: "McDonald's", cat: 'Fast Food', sub: 'Sandwich', cal: 243, p: 10, c: 23, f: 13, fib: 0.5, servings: [S.g100, S.custom('1 sandwich', 'adet', 142)], aliases: ['filet o fish', 'fish sandwich mcdonalds'] }),
   food({ id: 'gr-mcd-big-breakfast', name: 'Big Breakfast', brand: "McDonald's", cat: 'Fast Food', sub: 'Breakfast', cal: 210, p: 11, c: 13, f: 13, fib: 0.5, servings: [S.g100, S.custom('1 serving', 'porsiyon', 273)], aliases: ['mcdonalds big breakfast'] }),
+  food({ id: 'gr-mcd-happy-meal', name: 'Happy Meal (Cheeseburger)', brand: "McDonald's", cat: 'Fast Food', sub: 'Combo', cal: 216, p: 11, c: 19, f: 10, fib: 1, servings: [S.g100, S.custom('1 meal', 'porsiyon', 210)], aliases: ['happy meal', 'mcdonalds happy meal', 'kids meal'] }),
+  food({ id: 'gr-mcd-double-cheese', name: 'Double Cheeseburger', brand: "McDonald's", cat: 'Fast Food', sub: 'Burger', cal: 265, p: 16, c: 14, f: 16, fib: 1, servings: [S.g100, S.custom('1 burger', 'adet', 175)], aliases: ['mcd double cheeseburger', 'double cheese mcdonalds', 'mcdouble'] }),
+  food({ id: 'gr-mcd-mcflurry-mm', name: "McFlurry (M&M's)", brand: "McDonald's", cat: 'Fast Food', sub: 'Dessert', cal: 190, p: 3, c: 30, f: 7, fib: 0.5, servings: [S.g100, S.custom('1 cup', 'porsiyon', 200)], aliases: ['m&m mcflurry', 'mcflurry mms', 'mm mcflurry'] }),
+  food({ id: 'gr-mcd-sausage-mcmuffin', name: 'Sausage McMuffin', brand: "McDonald's", cat: 'Fast Food', sub: 'Breakfast', cal: 218, p: 11, c: 17, f: 12, fib: 1, servings: [S.g100, S.custom('1 sandwich', 'adet', 130)], aliases: ['sausage mcmuffin', 'mcdonalds sausage muffin', 'sausage egg mcmuffin'] }),
 
   // ── Burger King ─────────────────────────────────────────────
   food({ id: 'gr-bk-whopper', name: 'Whopper', brand: 'Burger King', cat: 'Fast Food', sub: 'Burger', cal: 230, p: 11, c: 16, f: 14, fib: 1, servings: [S.g100, S.custom('1 burger', 'adet', 291)], aliases: ['bk whopper', 'whopper burger'] }),
   food({ id: 'gr-bk-chicken-royale', name: 'Chicken Royale', brand: 'Burger King', cat: 'Fast Food', sub: 'Sandwich', cal: 235, p: 10, c: 22, f: 12, fib: 1, servings: [S.g100, S.custom('1 sandwich', 'adet', 200)], aliases: ['bk chicken royale', 'chicken sandwich bk'] }),
   food({ id: 'gr-bk-chicken-fries', name: 'BK Chicken Fries', brand: 'Burger King', cat: 'Fast Food', sub: 'Chicken', cal: 290, p: 13, c: 22, f: 17, fib: 0.5, servings: [S.g100, S.custom('9 pieces', 'adet', 85)], aliases: ['burger king chicken fries'] }),
   food({ id: 'gr-bk-onion-rings', name: 'Onion Rings', brand: 'Burger King', cat: 'Fast Food', sub: 'Sides', cal: 350, p: 4, c: 44, f: 18, fib: 2, servings: [S.g100, S.custom('1 serving', 'porsiyon', 91)], aliases: ['bk onion rings'] }),
+  food({ id: 'gr-bk-double-whopper', name: 'Double Whopper', brand: 'Burger King', cat: 'Fast Food', sub: 'Burger', cal: 230, p: 13, c: 12, f: 15, fib: 0.5, servings: [S.g100, S.custom('1 burger', 'adet', 374)], aliases: ['double whopper', 'bk double whopper', 'whopper double'] }),
+  food({ id: 'gr-bk-chicken-nuggets', name: 'Chicken Nuggets (6pc)', brand: 'Burger King', cat: 'Fast Food', sub: 'Chicken', cal: 270, p: 14, c: 16, f: 17, fib: 0.5, servings: [S.g100, S.custom('6 pieces', 'adet', 96)], aliases: ['bk nuggets', 'burger king nuggets', 'bk chicken nuggets'] }),
 
   // ── KFC ─────────────────────────────────────────────────────
   food({ id: 'gr-kfc-original', name: 'Original Recipe Chicken (Thigh)', brand: 'KFC', cat: 'Fast Food', sub: 'Chicken', cal: 260, p: 18, c: 9, f: 17, fib: 0.5, servings: [S.g100, S.custom('1 piece', 'adet', 130)], aliases: ['kfc chicken', 'kfc original recipe'] }),
   food({ id: 'gr-kfc-zinger', name: 'Zinger Burger', brand: 'KFC', cat: 'Fast Food', sub: 'Burger', cal: 240, p: 12, c: 22, f: 12, fib: 1, servings: [S.g100, S.custom('1 burger', 'adet', 200)], aliases: ['kfc zinger', 'zinger sandwich'] }),
   food({ id: 'gr-kfc-popcorn-chicken', name: 'Popcorn Chicken', brand: 'KFC', cat: 'Fast Food', sub: 'Chicken', cal: 285, p: 16, c: 18, f: 16, fib: 0.5, servings: [S.g100, S.custom('1 serving', 'porsiyon', 114)], aliases: ['kfc popcorn chicken'] }),
   food({ id: 'gr-kfc-coleslaw', name: 'Coleslaw', brand: 'KFC', cat: 'Fast Food', sub: 'Sides', cal: 82, p: 1, c: 11, f: 4, fib: 1.5, servings: [S.g100, S.custom('1 serving', 'porsiyon', 130)], aliases: ['kfc coleslaw'] }),
+  food({ id: 'gr-kfc-chicken-sandwich', name: 'KFC Chicken Sandwich', brand: 'KFC', cat: 'Fast Food', sub: 'Sandwich', cal: 243, p: 14, c: 19, f: 12, fib: 1, servings: [S.g100, S.custom('1 sandwich', 'adet', 181)], aliases: ['kfc sandwich', 'kfc chicken burger', 'kfc crispy sandwich'] }),
+  food({ id: 'gr-kfc-famous-bowl', name: 'KFC Famous Bowl', brand: 'KFC', cat: 'Fast Food', sub: 'Bowl', cal: 130, p: 6, c: 14, f: 5.5, fib: 1, servings: [S.g100, S.custom('1 bowl', 'porsiyon', 360)], aliases: ['famous bowl', 'kfc bowl', 'kfc mashed potato bowl'] }),
+  food({ id: 'gr-kfc-biscuit', name: 'KFC Biscuit', brand: 'KFC', cat: 'Fast Food', sub: 'Sides', cal: 330, p: 5, c: 37, f: 18, fib: 1, servings: [S.g100, S.custom('1 piece', 'adet', 56)], aliases: ['kfc buttermilk biscuit', 'kfc bread', 'kfc biscuit side'] }),
+  food({ id: 'gr-kfc-mashed', name: 'Mashed Potatoes & Gravy', brand: 'KFC', cat: 'Fast Food', sub: 'Sides', cal: 81, p: 1.5, c: 11, f: 3.5, fib: 0.5, servings: [S.g100, S.custom('1 serving', 'porsiyon', 136)], aliases: ['kfc mashed potatoes', 'kfc mash', 'kfc potato gravy'] }),
 
   // ── Subway ──────────────────────────────────────────────────
   food({ id: 'gr-subway-turkey', name: 'Turkey Breast Sub (6")', brand: 'Subway', cat: 'Fast Food', sub: 'Sub', cal: 134, p: 9, c: 18, f: 2.5, fib: 1.5, servings: [S.g100, S.custom('1 sub', 'adet', 220)], aliases: ['subway turkey', 'turkey sub'] }),
@@ -32,6 +42,10 @@ export const GLOBAL_RESTAURANT_ITEMS: FoodCatalogItem[] = [
   food({ id: 'gr-subway-chicken-teriyaki', name: 'Chicken Teriyaki Sub (6")', brand: 'Subway', cat: 'Fast Food', sub: 'Sub', cal: 149, p: 10, c: 18, f: 3, fib: 1.5, servings: [S.g100, S.custom('1 sub', 'adet', 270)], aliases: ['subway teriyaki', 'chicken teriyaki sub'] }),
   food({ id: 'gr-subway-veggie', name: 'Veggie Delite (6")', brand: 'Subway', cat: 'Fast Food', sub: 'Sub', cal: 107, p: 4, c: 18, f: 1.5, fib: 2, servings: [S.g100, S.custom('1 sub', 'adet', 168)], aliases: ['subway veggie', 'veggie sub'] }),
   food({ id: 'gr-subway-meatball', name: 'Meatball Marinara (6")', brand: 'Subway', cat: 'Fast Food', sub: 'Sub', cal: 175, p: 9, c: 18, f: 7, fib: 2, servings: [S.g100, S.custom('1 sub', 'adet', 260)], aliases: ['subway meatball', 'meatball sub'] }),
+  food({ id: 'gr-subway-steak-cheese', name: 'Steak & Cheese (6")', brand: 'Subway', cat: 'Fast Food', sub: 'Sub', cal: 153, p: 9, c: 16, f: 6, fib: 1, servings: [S.g100, S.custom('1 sub', 'adet', 268)], aliases: ['subway steak cheese', 'steak and cheese sub', 'philly cheesesteak sub'] }),
+  food({ id: 'gr-subway-chicken-bacon', name: 'Chicken Bacon Ranch (6")', brand: 'Subway', cat: 'Fast Food', sub: 'Sub', cal: 175, p: 11, c: 16, f: 8, fib: 1, servings: [S.g100, S.custom('1 sub', 'adet', 280)], aliases: ['subway chicken bacon ranch', 'chicken bacon sub', 'cbr sub'] }),
+  food({ id: 'gr-subway-blt', name: 'BLT (6")', brand: 'Subway', cat: 'Fast Food', sub: 'Sub', cal: 147, p: 6, c: 16, f: 6, fib: 1, servings: [S.g100, S.custom('1 sub', 'adet', 200)], aliases: ['subway blt', 'bacon lettuce tomato sub', 'blt sandwich'] }),
+  food({ id: 'gr-subway-cookie', name: 'Chocolate Chip Cookie', brand: 'Subway', cat: 'Fast Food', sub: 'Dessert', cal: 448, p: 4.5, c: 60, f: 21, fib: 1.5, servings: [S.g100, S.custom('1 cookie', 'adet', 45)], aliases: ['subway cookie', 'subway chocolate chip', 'subway dessert cookie'] }),
 
   // ── Starbucks ───────────────────────────────────────────────
   food({ id: 'gr-sbux-latte', name: 'Caffè Latte (Grande)', brand: 'Starbucks', cat: 'Kahve', sub: 'Coffee', cal: 25, p: 1.7, c: 2.4, f: 0.9, fib: 0, servings: [S.ml100, S.custom('1 cup', 'ml', undefined, 473)], aliases: ['starbucks latte', 'grande latte'] }),
@@ -41,6 +55,11 @@ export const GLOBAL_RESTAURANT_ITEMS: FoodCatalogItem[] = [
   food({ id: 'gr-sbux-hot-choc', name: 'Hot Chocolate (Grande)', brand: 'Starbucks', cat: 'Kahve', sub: 'Hot Drink', cal: 68, p: 2, c: 8, f: 3, fib: 0.5, servings: [S.ml100, S.custom('1 cup', 'ml', undefined, 473)], aliases: ['starbucks hot chocolate', 'grande hot choc'] }),
   food({ id: 'gr-sbux-chai-latte', name: 'Chai Tea Latte (Grande)', brand: 'Starbucks', cat: 'Kahve', sub: 'Tea', cal: 50, p: 1, c: 9, f: 1, fib: 0, servings: [S.ml100, S.custom('1 cup', 'ml', undefined, 473)], aliases: ['starbucks chai', 'chai latte'] }),
   food({ id: 'gr-sbux-mocha', name: 'Mocha (Grande)', brand: 'Starbucks', cat: 'Kahve', sub: 'Coffee', cal: 63, p: 2, c: 8, f: 2.5, fib: 0.5, servings: [S.ml100, S.custom('1 cup', 'ml', undefined, 473)], aliases: ['starbucks mocha', 'cafe mocha'] }),
+  food({ id: 'gr-sbux-psl', name: 'Pumpkin Spice Latte (Grande)', brand: 'Starbucks', cat: 'Kahve', sub: 'Coffee', cal: 55, p: 1.5, c: 9, f: 1.5, fib: 0, servings: [S.ml100, S.custom('1 cup', 'ml', undefined, 473)], aliases: ['psl', 'pumpkin spice latte', 'starbucks pumpkin latte'] }),
+  food({ id: 'gr-sbux-matcha', name: 'Matcha Latte (Grande)', brand: 'Starbucks', cat: 'Kahve', sub: 'Tea', cal: 48, p: 1.5, c: 8, f: 1.2, fib: 0, servings: [S.ml100, S.custom('1 cup', 'ml', undefined, 473)], aliases: ['starbucks matcha', 'matcha green tea latte', 'matcha latte'] }),
+  food({ id: 'gr-sbux-vanilla-sweet', name: 'Vanilla Sweet Cream Cold Brew (Grande)', brand: 'Starbucks', cat: 'Kahve', sub: 'Coffee', cal: 18, p: 0.5, c: 2, f: 0.8, fib: 0, servings: [S.ml100, S.custom('1 cup', 'ml', undefined, 473)], aliases: ['vanilla sweet cream cold brew', 'vsccb', 'starbucks cold brew vanilla'] }),
+  food({ id: 'gr-sbux-cake-pop', name: 'Cake Pop', brand: 'Starbucks', cat: 'Kahve', sub: 'Pastry', cal: 370, p: 4, c: 48, f: 18, fib: 0.5, servings: [S.g100, S.custom('1 piece', 'adet', 37)], aliases: ['starbucks cake pop', 'birthday cake pop', 'sbux cake pop'] }),
+  food({ id: 'gr-sbux-egg-bites', name: 'Egg Bites (Bacon & Gruyere)', brand: 'Starbucks', cat: 'Kahve', sub: 'Breakfast', cal: 195, p: 14, c: 7, f: 13, fib: 0, servings: [S.g100, S.custom('2 pieces', 'adet', 128)], aliases: ['starbucks egg bites', 'sous vide egg bites', 'bacon gruyere bites'] }),
 
   // ── Pizza ───────────────────────────────────────────────────
   food({ id: 'gr-pizza-pepperoni', name: 'Pepperoni Pizza', brand: undefined, cat: 'Fast Food', sub: 'Pizza', cal: 266, p: 11, c: 28, f: 12, fib: 1.5, servings: [S.g100, S.custom('1 slice', 'dilim', 107)], aliases: ['pepperoni slice', 'pepperoni pizza slice'] }),
@@ -49,6 +68,24 @@ export const GLOBAL_RESTAURANT_ITEMS: FoodCatalogItem[] = [
   food({ id: 'gr-pizza-hawaiian', name: 'Hawaiian Pizza', brand: undefined, cat: 'Fast Food', sub: 'Pizza', cal: 240, p: 11, c: 28, f: 9, fib: 1.5, servings: [S.g100, S.custom('1 slice', 'dilim', 105)], aliases: ['ham and pineapple pizza'] }),
   food({ id: 'gr-pizza-meat-lovers', name: 'Meat Lovers Pizza', brand: undefined, cat: 'Fast Food', sub: 'Pizza', cal: 285, p: 14, c: 25, f: 14, fib: 1, servings: [S.g100, S.custom('1 slice', 'dilim', 120)], aliases: ['meat feast pizza', 'all meat pizza'] }),
   food({ id: 'gr-garlic-bread', name: 'Garlic Bread', brand: undefined, cat: 'Fast Food', sub: 'Sides', cal: 350, p: 8, c: 40, f: 18, fib: 1.5, servings: [S.g100, S.custom('1 slice', 'dilim', 50)], aliases: ['cheesy garlic bread'] }),
+  food({ id: 'gr-pizza-veggie', name: 'Veggie Supreme Pizza', brand: undefined, cat: 'Fast Food', sub: 'Pizza', cal: 215, p: 9, c: 27, f: 8, fib: 2, servings: [S.g100, S.custom('1 slice', 'dilim', 115)], aliases: ['veggie pizza', 'vegetable supreme', 'garden pizza'] }),
+
+  // ── Domino's ────────────────────────────────────────────────
+  food({ id: 'gr-dominos-pepperoni', name: 'Pepperoni Pizza (Hand Tossed)', brand: "Domino's", cat: 'Fast Food', sub: 'Pizza', cal: 266, p: 11, c: 28, f: 12, fib: 1.5, servings: [S.g100, S.custom('1 slice', 'dilim', 107)], aliases: ['dominos pepperoni', 'dominos pepperoni pizza', 'domino pepperoni'] }),
+  food({ id: 'gr-dominos-cheese', name: 'Cheese Pizza', brand: "Domino's", cat: 'Fast Food', sub: 'Pizza', cal: 240, p: 10, c: 28, f: 10, fib: 1.5, servings: [S.g100, S.custom('1 slice', 'dilim', 100)], aliases: ['dominos cheese pizza', 'dominos plain pizza', 'domino cheese'] }),
+  food({ id: 'gr-dominos-wings', name: 'Chicken Wings (2pc)', brand: "Domino's", cat: 'Fast Food', sub: 'Chicken', cal: 235, p: 17, c: 4, f: 17, fib: 0, servings: [S.g100, S.custom('2 pieces', 'adet', 60)], aliases: ['dominos wings', 'dominos chicken wings', 'domino wings'] }),
+  food({ id: 'gr-dominos-breadsticks', name: 'Breadsticks', brand: "Domino's", cat: 'Fast Food', sub: 'Sides', cal: 308, p: 7.7, c: 42, f: 12, fib: 1.5, servings: [S.g100, S.custom('1 piece', 'adet', 30)], aliases: ['dominos breadsticks', 'dominos bread', 'domino breadstick'] }),
+  food({ id: 'gr-dominos-pasta', name: 'Pasta Primavera', brand: "Domino's", cat: 'Fast Food', sub: 'Pasta', cal: 145, p: 5, c: 17, f: 6, fib: 1, servings: [S.g100, S.custom('1 serving', 'porsiyon', 300)], aliases: ['dominos pasta', 'dominos pasta primavera', 'domino pasta'] }),
+  food({ id: 'gr-dominos-stuffed', name: 'Stuffed Crust Pizza (Pepperoni)', brand: "Domino's", cat: 'Fast Food', sub: 'Pizza', cal: 275, p: 12, c: 26, f: 14, fib: 1.5, servings: [S.g100, S.custom('1 slice', 'dilim', 135)], aliases: ['dominos stuffed crust', 'stuffed crust pepperoni', 'domino stuffed pizza'] }),
+
+  // ── Papa John's ─────────────────────────────────────────────
+  food({ id: 'gr-papa-johns-pepperoni', name: 'Pepperoni Pizza (Large)', brand: "Papa John's", cat: 'Fast Food', sub: 'Pizza', cal: 260, p: 10, c: 28, f: 12, fib: 1.5, servings: [S.g100, S.custom('1 slice', 'dilim', 110)], aliases: ['papa johns pepperoni', 'papa john pizza', 'papa johns slice'] }),
+
+  // ── Pizza Hut ───────────────────────────────────────────────
+  food({ id: 'gr-pizza-hut-pepperoni', name: 'Pepperoni Pizza (Medium)', brand: 'Pizza Hut', cat: 'Fast Food', sub: 'Pizza', cal: 250, p: 10, c: 27, f: 11, fib: 1.5, servings: [S.g100, S.custom('1 slice', 'dilim', 105)], aliases: ['pizza hut pepperoni', 'pizza hut slice', 'pan pizza pepperoni'] }),
+
+  // ── Little Caesars ──────────────────────────────────────────
+  food({ id: 'gr-little-caesars-pepperoni', name: 'Pepperoni Pizza', brand: 'Little Caesars', cat: 'Fast Food', sub: 'Pizza', cal: 240, p: 10, c: 26, f: 10, fib: 1.5, servings: [S.g100, S.custom('1 slice', 'dilim', 100)], aliases: ['little caesars pepperoni', 'hot n ready pepperoni', 'little caesars slice'] }),
 
   // ── Chipotle Style ──────────────────────────────────────────
   food({ id: 'gr-chipotle-chicken-bowl', name: 'Chicken Burrito Bowl', brand: 'Chipotle', cat: 'Dünya Mutfağı', sub: 'Mexican', cal: 140, p: 10, c: 14, f: 5, fib: 3, servings: [S.g100, S.custom('1 bowl', 'porsiyon', 510)], aliases: ['chipotle bowl', 'burrito bowl'] }),
@@ -56,12 +93,69 @@ export const GLOBAL_RESTAURANT_ITEMS: FoodCatalogItem[] = [
   food({ id: 'gr-chipotle-guacamole', name: 'Guacamole', brand: 'Chipotle', cat: 'Soslar', sub: 'Dip', cal: 160, p: 2, c: 9, f: 15, fib: 7, servings: [S.g100, S.custom('1 serving', 'porsiyon', 60)], aliases: ['guac', 'avocado guacamole'] }),
   food({ id: 'gr-chipotle-chicken-burrito', name: 'Chicken Burrito', brand: 'Chipotle', cat: 'Dünya Mutfağı', sub: 'Mexican', cal: 170, p: 10, c: 18, f: 6, fib: 2.5, servings: [S.g100, S.custom('1 burrito', 'adet', 450)], aliases: ['chipotle chicken burrito'] }),
   food({ id: 'gr-chipotle-chips-salsa', name: 'Chips & Salsa', brand: 'Chipotle', cat: 'Atıştırmalık', sub: 'Snack', cal: 450, p: 5, c: 55, f: 23, fib: 3, servings: [S.g100, S.custom('1 serving', 'porsiyon', 100)], aliases: ['tortilla chips and salsa'] }),
+  food({ id: 'gr-chipotle-sofritas', name: 'Sofritas Bowl', brand: 'Chipotle', cat: 'Dünya Mutfağı', sub: 'Mexican', cal: 120, p: 7, c: 10, f: 6, fib: 3, servings: [S.g100, S.custom('1 bowl', 'porsiyon', 500)], aliases: ['chipotle sofritas', 'sofritas burrito bowl', 'chipotle tofu bowl'] }),
 
   // ── Taco Bell Style ─────────────────────────────────────────
   food({ id: 'gr-taco-bell-crunchy', name: 'Crunchy Taco', brand: 'Taco Bell', cat: 'Dünya Mutfağı', sub: 'Mexican', cal: 218, p: 10, c: 19, f: 12, fib: 2, servings: [S.g100, S.custom('1 taco', 'adet', 78)], aliases: ['taco bell crunchy taco', 'hard shell taco'] }),
   food({ id: 'gr-taco-bell-quesadilla', name: 'Chicken Quesadilla', brand: 'Taco Bell', cat: 'Dünya Mutfağı', sub: 'Mexican', cal: 240, p: 14, c: 20, f: 12, fib: 1, servings: [S.g100, S.custom('1 piece', 'adet', 184)], aliases: ['taco bell quesadilla'] }),
   food({ id: 'gr-taco-bell-bean-burrito', name: 'Bean Burrito', brand: 'Taco Bell', cat: 'Dünya Mutfağı', sub: 'Mexican', cal: 180, p: 7, c: 23, f: 6, fib: 4, servings: [S.g100, S.custom('1 burrito', 'adet', 198)], aliases: ['taco bell bean burrito'] }),
   food({ id: 'gr-taco-bell-nachos', name: 'Nachos BellGrande', brand: 'Taco Bell', cat: 'Dünya Mutfağı', sub: 'Mexican', cal: 250, p: 7, c: 25, f: 13, fib: 2.5, servings: [S.g100, S.custom('1 serving', 'porsiyon', 308)], aliases: ['taco bell nachos', 'nachos bell grande'] }),
+
+  // ── Chick-fil-A ─────────────────────────────────────────────
+  food({ id: 'gr-cfa-sandwich', name: 'Chick-fil-A Chicken Sandwich', brand: 'Chick-fil-A', cat: 'Fast Food', sub: 'Sandwich', cal: 252, p: 17, c: 22, f: 11, fib: 1, servings: [S.g100, S.custom('1 sandwich', 'adet', 143)], aliases: ['chick fil a sandwich', 'cfa chicken sandwich', 'chick-fil-a original'] }),
+  food({ id: 'gr-cfa-nuggets-8', name: 'Chick-fil-A Nuggets (8pc)', brand: 'Chick-fil-A', cat: 'Fast Food', sub: 'Chicken', cal: 263, p: 21, c: 10, f: 16, fib: 0.5, servings: [S.g100, S.custom('8 pieces', 'adet', 113)], aliases: ['cfa nuggets', 'chick fil a nuggets', 'chick-fil-a chicken nuggets'] }),
+  food({ id: 'gr-cfa-waffle-fries', name: 'Waffle Fries', brand: 'Chick-fil-A', cat: 'Fast Food', sub: 'Sides', cal: 280, p: 3.4, c: 37, f: 14, fib: 3, servings: [S.g100, S.custom('1 serving', 'porsiyon', 125)], aliases: ['cfa fries', 'chick fil a fries', 'chick-fil-a waffle fries'] }),
+  food({ id: 'gr-cfa-lemonade', name: 'Chick-fil-A Lemonade', brand: 'Chick-fil-A', cat: 'Kahve', sub: 'Beverage', cal: 40, p: 0, c: 10, f: 0, fib: 0, servings: [S.ml100, S.custom('1 cup', 'ml', undefined, 300)], aliases: ['cfa lemonade', 'chick fil a lemonade', 'chick-fil-a drink'] }),
+  food({ id: 'gr-cfa-spicy-sandwich', name: 'Spicy Chicken Sandwich', brand: 'Chick-fil-A', cat: 'Fast Food', sub: 'Sandwich', cal: 265, p: 18, c: 22, f: 12, fib: 1, servings: [S.g100, S.custom('1 sandwich', 'adet', 148)], aliases: ['cfa spicy sandwich', 'chick fil a spicy', 'spicy deluxe chick-fil-a'] }),
+  food({ id: 'gr-cfa-grilled-nuggets', name: 'Grilled Nuggets (8pc)', brand: 'Chick-fil-A', cat: 'Fast Food', sub: 'Chicken', cal: 128, p: 25, c: 2, f: 2, fib: 0, servings: [S.g100, S.custom('8 pieces', 'adet', 100)], aliases: ['cfa grilled nuggets', 'chick fil a grilled', 'chick-fil-a grilled chicken'] }),
+
+  // ── Wendy's ─────────────────────────────────────────────────
+  food({ id: 'gr-wendys-daves', name: "Dave's Single", brand: "Wendy's", cat: 'Fast Food', sub: 'Burger', cal: 247, p: 14, c: 14, f: 15, fib: 1, servings: [S.g100, S.custom('1 burger', 'adet', 270)], aliases: ['daves single', 'wendys burger', 'wendys dave single'] }),
+  food({ id: 'gr-wendys-baconator', name: 'Baconator', brand: "Wendy's", cat: 'Fast Food', sub: 'Burger', cal: 262, p: 16, c: 10, f: 17, fib: 0.5, servings: [S.g100, S.custom('1 burger', 'adet', 314)], aliases: ['wendys baconator', 'baconator burger', 'bacon cheeseburger wendys'] }),
+  food({ id: 'gr-wendys-frosty', name: 'Frosty (Medium)', brand: "Wendy's", cat: 'Fast Food', sub: 'Dessert', cal: 137, p: 3.5, c: 20, f: 4.8, fib: 0.3, servings: [S.ml100, S.custom('1 cup', 'ml', undefined, 298)], aliases: ['wendys frosty', 'chocolate frosty', 'vanilla frosty'] }),
+  food({ id: 'gr-wendys-nuggets', name: 'Spicy Chicken Nuggets (6pc)', brand: "Wendy's", cat: 'Fast Food', sub: 'Chicken', cal: 265, p: 14, c: 16, f: 17, fib: 0.5, servings: [S.g100, S.custom('6 pieces', 'adet', 90)], aliases: ['wendys nuggets', 'wendys spicy nuggets', 'wendy chicken nuggets'] }),
+  food({ id: 'gr-wendys-chili', name: "Wendy's Chili", brand: "Wendy's", cat: 'Fast Food', sub: 'Soup', cal: 72, p: 6.4, c: 6.8, f: 2.1, fib: 2, servings: [S.g100, S.custom('1 bowl', 'porsiyon', 256)], aliases: ['wendys chili', 'wendy chili bowl', 'wendys beef chili'] }),
+
+  // ── Panda Express ───────────────────────────────────────────
+  food({ id: 'gr-panda-orange', name: 'Orange Chicken', brand: 'Panda Express', cat: 'Sushi & Asya Mutfağı', sub: 'Chinese', cal: 168, p: 10, c: 17, f: 7, fib: 0.5, servings: [S.g100, S.custom('1 serving', 'porsiyon', 162)], aliases: ['panda orange chicken', 'panda express orange', 'orange chicken panda'] }),
+  food({ id: 'gr-panda-beijing', name: 'Beijing Beef', brand: 'Panda Express', cat: 'Sushi & Asya Mutfağı', sub: 'Chinese', cal: 220, p: 9, c: 18, f: 13, fib: 1, servings: [S.g100, S.custom('1 serving', 'porsiyon', 162)], aliases: ['panda beijing beef', 'panda express beef', 'beijing beef panda'] }),
+  food({ id: 'gr-panda-fried-rice', name: 'Fried Rice', brand: 'Panda Express', cat: 'Sushi & Asya Mutfağı', sub: 'Chinese', cal: 164, p: 4, c: 24, f: 6, fib: 1, servings: [S.g100, S.custom('1 serving', 'porsiyon', 205)], aliases: ['panda fried rice', 'panda express rice', 'chinese fried rice panda'] }),
+  food({ id: 'gr-panda-chow-mein', name: 'Chow Mein', brand: 'Panda Express', cat: 'Sushi & Asya Mutfağı', sub: 'Chinese', cal: 140, p: 4, c: 18, f: 6, fib: 1.5, servings: [S.g100, S.custom('1 serving', 'porsiyon', 205)], aliases: ['panda chow mein', 'panda express noodles', 'chow mein panda'] }),
+  food({ id: 'gr-panda-kung-pao', name: 'Kung Pao Chicken', brand: 'Panda Express', cat: 'Sushi & Asya Mutfağı', sub: 'Chinese', cal: 145, p: 13, c: 8, f: 7, fib: 1, servings: [S.g100, S.custom('1 serving', 'porsiyon', 162)], aliases: ['panda kung pao', 'kung pao chicken panda', 'panda express kung pao'] }),
+
+  // ── Popeyes ─────────────────────────────────────────────────
+  food({ id: 'gr-popeyes-sandwich', name: 'Chicken Sandwich', brand: 'Popeyes', cat: 'Fast Food', sub: 'Sandwich', cal: 244, p: 13, c: 17, f: 14, fib: 0.5, servings: [S.g100, S.custom('1 sandwich', 'adet', 224)], aliases: ['popeyes sandwich', 'popeyes chicken sandwich', 'popeyes spicy sandwich'] }),
+  food({ id: 'gr-popeyes-tenders', name: 'Chicken Tenders (3pc)', brand: 'Popeyes', cat: 'Fast Food', sub: 'Chicken', cal: 278, p: 18, c: 14, f: 17, fib: 0.5, servings: [S.g100, S.custom('3 pieces', 'adet', 113)], aliases: ['popeyes tenders', 'popeyes chicken tenders', 'popeyes strips'] }),
+  food({ id: 'gr-popeyes-biscuit', name: 'Buttermilk Biscuit', brand: 'Popeyes', cat: 'Fast Food', sub: 'Sides', cal: 335, p: 5, c: 35, f: 19, fib: 1, servings: [S.g100, S.custom('1 piece', 'adet', 67)], aliases: ['popeyes biscuit', 'popeyes buttermilk biscuit', 'popeyes bread'] }),
+  food({ id: 'gr-popeyes-mashed', name: 'Mashed Potatoes & Gravy', brand: 'Popeyes', cat: 'Fast Food', sub: 'Sides', cal: 80, p: 1.3, c: 11, f: 3.5, fib: 0.5, servings: [S.g100, S.custom('1 serving', 'porsiyon', 142)], aliases: ['popeyes mashed potatoes', 'popeyes mash', 'popeyes potato gravy'] }),
+
+  // ── Five Guys ───────────────────────────────────────────────
+  food({ id: 'gr-five-guys-burger', name: 'Cheeseburger', brand: 'Five Guys', cat: 'Fast Food', sub: 'Burger', cal: 266, p: 16, c: 12, f: 18, fib: 0.5, servings: [S.g100, S.custom('1 burger', 'adet', 303)], aliases: ['five guys cheeseburger', 'five guys burger', '5 guys burger'] }),
+  food({ id: 'gr-five-guys-fries', name: 'Cajun Fries', brand: 'Five Guys', cat: 'Fast Food', sub: 'Sides', cal: 310, p: 3.5, c: 40, f: 15, fib: 4, servings: [S.g100, S.custom('1 serving', 'porsiyon', 227)], aliases: ['five guys fries', 'five guys cajun fries', '5 guys fries'] }),
+  food({ id: 'gr-five-guys-shake', name: 'Milkshake (Vanilla)', brand: 'Five Guys', cat: 'Fast Food', sub: 'Dessert', cal: 153, p: 3, c: 21, f: 7, fib: 0, servings: [S.ml100, S.custom('1 cup', 'ml', undefined, 490)], aliases: ['five guys milkshake', 'five guys shake', '5 guys vanilla shake'] }),
+
+  // ── Shake Shack ─────────────────────────────────────────────
+  food({ id: 'gr-shake-shack-burger', name: 'ShackBurger', brand: 'Shake Shack', cat: 'Fast Food', sub: 'Burger', cal: 252, p: 14, c: 14, f: 16, fib: 0.5, servings: [S.g100, S.custom('1 burger', 'adet', 219)], aliases: ['shackburger', 'shake shack burger', 'shake shack cheeseburger'] }),
+  food({ id: 'gr-shake-shack-fries', name: 'Cheese Fries', brand: 'Shake Shack', cat: 'Fast Food', sub: 'Sides', cal: 250, p: 5, c: 30, f: 12, fib: 2, servings: [S.g100, S.custom('1 serving', 'porsiyon', 170)], aliases: ['shake shack fries', 'shake shack cheese fries', 'shack fries'] }),
+  food({ id: 'gr-shake-shack-concrete', name: 'Concrete (Vanilla)', brand: 'Shake Shack', cat: 'Fast Food', sub: 'Dessert', cal: 190, p: 4, c: 25, f: 8, fib: 0, servings: [S.g100, S.custom('1 cup', 'porsiyon', 240)], aliases: ['shake shack concrete', 'shake shack custard', 'shack concrete'] }),
+
+  // ── Nando's ─────────────────────────────────────────────────
+  food({ id: 'gr-nandos-chicken', name: 'Peri-Peri Chicken (Quarter)', brand: "Nando's", cat: 'Fast Food', sub: 'Chicken', cal: 174, p: 26, c: 1, f: 7, fib: 0, servings: [S.g100, S.custom('1 piece', 'adet', 170)], aliases: ['nandos chicken', 'nandos peri peri', 'peri peri quarter chicken'] }),
+  food({ id: 'gr-nandos-spicy-rice', name: 'Spicy Rice', brand: "Nando's", cat: 'Fast Food', sub: 'Sides', cal: 125, p: 3, c: 22, f: 3, fib: 1, servings: [S.g100, S.custom('1 serving', 'porsiyon', 210)], aliases: ['nandos spicy rice', 'nandos rice', 'peri peri rice'] }),
+  food({ id: 'gr-nandos-coleslaw', name: 'Coleslaw', brand: "Nando's", cat: 'Fast Food', sub: 'Sides', cal: 95, p: 1, c: 8, f: 7, fib: 1.5, servings: [S.g100, S.custom('1 serving', 'porsiyon', 120)], aliases: ['nandos coleslaw', 'nandos slaw', 'nando coleslaw'] }),
+  food({ id: 'gr-nandos-corn', name: 'Corn on the Cob', brand: "Nando's", cat: 'Fast Food', sub: 'Sides', cal: 86, p: 3.3, c: 19, f: 1.4, fib: 2.7, servings: [S.g100, S.custom('1 piece', 'adet', 150)], aliases: ['nandos corn', 'nandos corn cob', 'peri peri corn'] }),
+
+  // ── Wingstop ────────────────────────────────────────────────
+  food({ id: 'gr-wingstop-classic', name: 'Classic Wings (5pc)', brand: 'Wingstop', cat: 'Fast Food', sub: 'Chicken', cal: 200, p: 18, c: 2, f: 13, fib: 0, servings: [S.g100, S.custom('5 pieces', 'adet', 150)], aliases: ['wingstop classic wings', 'wingstop original', 'wingstop bone-in'] }),
+  food({ id: 'gr-wingstop-boneless', name: 'Boneless Wings (5pc)', brand: 'Wingstop', cat: 'Fast Food', sub: 'Chicken', cal: 240, p: 14, c: 16, f: 14, fib: 1, servings: [S.g100, S.custom('5 pieces', 'adet', 140)], aliases: ['wingstop boneless', 'wingstop boneless wings', 'boneless chicken wingstop'] }),
+  food({ id: 'gr-wingstop-fries', name: 'Seasoned Fries', brand: 'Wingstop', cat: 'Fast Food', sub: 'Sides', cal: 310, p: 3.5, c: 40, f: 15, fib: 3, servings: [S.g100, S.custom('1 serving', 'porsiyon', 130)], aliases: ['wingstop fries', 'wingstop seasoned fries', 'wingstop chips'] }),
+
+  // ── In-N-Out ────────────────────────────────────────────────
+  food({ id: 'gr-in-n-out-double', name: 'Double-Double', brand: 'In-N-Out', cat: 'Fast Food', sub: 'Burger', cal: 248, p: 16, c: 12, f: 15, fib: 0.5, servings: [S.g100, S.custom('1 burger', 'adet', 330)], aliases: ['in n out double double', 'double double burger', 'in-n-out burger'] }),
+  food({ id: 'gr-in-n-out-fries', name: 'Fries', brand: 'In-N-Out', cat: 'Fast Food', sub: 'Sides', cal: 290, p: 3, c: 37, f: 15, fib: 3, servings: [S.g100, S.custom('1 serving', 'porsiyon', 125)], aliases: ['in n out fries', 'in-n-out fries', 'in n out chips'] }),
+
+  // ── Raising Cane's ──────────────────────────────────────────
+  food({ id: 'gr-raising-canes', name: "Chicken Fingers (3pc)", brand: "Raising Cane's", cat: 'Fast Food', sub: 'Chicken', cal: 280, p: 18, c: 15, f: 17, fib: 0.5, servings: [S.g100, S.custom('3 pieces', 'adet', 110)], aliases: ['raising canes chicken', 'canes fingers', 'raising canes tenders'] }),
 
   // ── Sushi ───────────────────────────────────────────────────
   food({ id: 'gr-salmon-nigiri', name: 'Salmon Nigiri', brand: undefined, cat: 'Sushi & Asya Mutfağı', sub: 'Sushi', cal: 170, p: 9, c: 19, f: 6, fib: 0, servings: [S.g100, S.custom('2 pieces', 'adet', 60)], aliases: ['sake nigiri', 'salmon sushi'] }),
@@ -71,6 +165,36 @@ export const GLOBAL_RESTAURANT_ITEMS: FoodCatalogItem[] = [
   food({ id: 'gr-edamame', name: 'Edamame', brand: undefined, cat: 'Sushi & Asya Mutfağı', sub: 'Appetizer', cal: 121, p: 12, c: 9, f: 5, fib: 5, servings: [S.g100, S.custom('1 serving', 'porsiyon', 155)], aliases: ['steamed edamame', 'soy beans'] }),
   food({ id: 'gr-miso-soup', name: 'Miso Soup', brand: undefined, cat: 'Sushi & Asya Mutfağı', sub: 'Soup', cal: 21, p: 1.3, c: 2.5, f: 0.6, fib: 0.5, servings: [S.g100, S.custom('1 bowl', 'porsiyon', 240)], aliases: ['miso broth'] }),
   food({ id: 'gr-chicken-teriyaki', name: 'Chicken Teriyaki', brand: undefined, cat: 'Sushi & Asya Mutfağı', sub: 'Main', cal: 155, p: 16, c: 11, f: 5, fib: 0.5, servings: [S.g100, S.custom('1 serving', 'porsiyon', 250)], aliases: ['teriyaki chicken', 'chicken teriyaki plate'] }),
+
+  // ── Dunkin' ─────────────────────────────────────────────────
+  food({ id: 'gr-dunkin-glazed', name: 'Glazed Donut', brand: "Dunkin'", cat: 'Kahve', sub: 'Pastry', cal: 378, p: 3.8, c: 50, f: 18, fib: 0.8, servings: [S.g100, S.custom('1 piece', 'adet', 60)], aliases: ['dunkin donut', 'dunkin glazed donut', 'glazed doughnut'] }),
+  food({ id: 'gr-dunkin-iced', name: 'Iced Coffee (Medium)', brand: "Dunkin'", cat: 'Kahve', sub: 'Cold Coffee', cal: 8, p: 0.4, c: 1, f: 0.3, fib: 0, servings: [S.ml100, S.custom('1 cup', 'ml', undefined, 600)], aliases: ['dunkin iced coffee', 'dunkin iced', 'dunkin cold coffee'] }),
+  food({ id: 'gr-dunkin-bagel', name: 'Everything Bagel', brand: "Dunkin'", cat: 'Kahve', sub: 'Bread', cal: 260, p: 10, c: 50, f: 2, fib: 2, servings: [S.g100, S.custom('1 piece', 'adet', 120)], aliases: ['dunkin bagel', 'dunkin everything bagel', 'dunkin breakfast bagel'] }),
+  food({ id: 'gr-dunkin-croissant', name: 'Croissant', brand: "Dunkin'", cat: 'Kahve', sub: 'Pastry', cal: 406, p: 8.2, c: 45, f: 21, fib: 1.5, servings: [S.g100, S.custom('1 piece', 'adet', 68)], aliases: ['dunkin croissant', 'dunkin butter croissant', 'dunkin pastry'] }),
+  food({ id: 'gr-dunkin-munchkins', name: 'Munchkins (5pc)', brand: "Dunkin'", cat: 'Kahve', sub: 'Pastry', cal: 400, p: 5, c: 47, f: 21, fib: 1, servings: [S.g100, S.custom('5 pieces', 'adet', 75)], aliases: ['dunkin munchkins', 'donut holes dunkin', 'munchkin bites'] }),
+
+  // ── Tim Hortons ─────────────────────────────────────────────
+  food({ id: 'gr-tims-donut', name: 'Honey Dip Donut', brand: 'Tim Hortons', cat: 'Kahve', sub: 'Pastry', cal: 347, p: 4, c: 47, f: 16, fib: 1, servings: [S.g100, S.custom('1 piece', 'adet', 68)], aliases: ['tim hortons donut', 'tims honey dip', 'timmies donut'] }),
+  food({ id: 'gr-tims-iced-capp', name: 'Iced Capp (Medium)', brand: 'Tim Hortons', cat: 'Kahve', sub: 'Cold Coffee', cal: 87, p: 1.7, c: 12, f: 3.8, fib: 0, servings: [S.ml100, S.custom('1 cup', 'ml', undefined, 350)], aliases: ['iced capp', 'tim hortons iced capp', 'tims iced cappuccino'] }),
+  food({ id: 'gr-tims-bagel', name: 'Everything Bagel', brand: 'Tim Hortons', cat: 'Kahve', sub: 'Bread', cal: 252, p: 9.6, c: 48, f: 2, fib: 2, servings: [S.g100, S.custom('1 piece', 'adet', 104)], aliases: ['tim hortons bagel', 'tims everything bagel', 'timmies bagel'] }),
+
+  // ── Panera Bread ────────────────────────────────────────────
+  food({ id: 'gr-panera-broccoli', name: 'Broccoli Cheddar Soup', brand: 'Panera', cat: 'Ana Yemek', sub: 'Soup', cal: 104, p: 3.5, c: 8, f: 6.5, fib: 0.5, servings: [S.g100, S.custom('1 bowl', 'porsiyon', 350)], aliases: ['panera broccoli soup', 'panera broccoli cheddar', 'broccoli cheese soup panera'] }),
+  food({ id: 'gr-panera-caesar', name: 'Caesar Salad', brand: 'Panera', cat: 'Ana Yemek', sub: 'Salad', cal: 95, p: 4, c: 5, f: 7, fib: 1, servings: [S.g100, S.custom('1 serving', 'porsiyon', 250)], aliases: ['panera caesar salad', 'panera caesar', 'panera salad'] }),
+  food({ id: 'gr-panera-mac', name: 'Mac & Cheese', brand: 'Panera', cat: 'Ana Yemek', sub: 'Pasta', cal: 138, p: 5.5, c: 14, f: 7, fib: 0.5, servings: [S.g100, S.custom('1 serving', 'porsiyon', 255)], aliases: ['panera mac and cheese', 'panera mac cheese', 'panera macaroni'] }),
+  food({ id: 'gr-panera-bread-bowl', name: 'Bread Bowl', brand: 'Panera', cat: 'Fast Food', sub: 'Bread', cal: 295, p: 10, c: 56, f: 3.5, fib: 2, servings: [S.g100, S.custom('1 piece', 'adet', 238)], aliases: ['panera bread bowl', 'panera sourdough bowl', 'soup bread bowl panera'] }),
+
+  // ── Costa Coffee ────────────────────────────────────────────
+  food({ id: 'gr-costa-latte', name: 'Latte (Medium)', brand: 'Costa Coffee', cat: 'Kahve', sub: 'Coffee', cal: 24, p: 1.7, c: 2.4, f: 0.8, fib: 0, servings: [S.ml100, S.custom('1 cup', 'ml', undefined, 350)], aliases: ['costa latte', 'costa coffee latte', 'costa medium latte'] }),
+  food({ id: 'gr-costa-flat-white', name: 'Flat White', brand: 'Costa Coffee', cat: 'Kahve', sub: 'Coffee', cal: 32, p: 2, c: 2.5, f: 1.5, fib: 0, servings: [S.ml100, S.custom('1 cup', 'ml', undefined, 227)], aliases: ['costa flat white', 'costa coffee flat white', 'flat white costa'] }),
+
+  // ── Pret A Manger ───────────────────────────────────────────
+  food({ id: 'gr-pret-croissant', name: 'Croissant', brand: 'Pret A Manger', cat: 'Kahve', sub: 'Pastry', cal: 406, p: 7.8, c: 42, f: 23, fib: 1.5, servings: [S.g100, S.custom('1 piece', 'adet', 65)], aliases: ['pret croissant', 'pret a manger croissant', 'pret butter croissant'] }),
+  food({ id: 'gr-pret-wrap', name: 'Chicken Caesar Wrap', brand: 'Pret A Manger', cat: 'Ana Yemek', sub: 'Wrap', cal: 175, p: 11, c: 14, f: 8, fib: 1, servings: [S.g100, S.custom('1 wrap', 'adet', 220)], aliases: ['pret chicken wrap', 'pret caesar wrap', 'pret a manger wrap'] }),
+
+  // ── Greggs ──────────────────────────────────────────────────
+  food({ id: 'gr-greggs-sausage', name: 'Sausage Roll', brand: 'Greggs', cat: 'Fast Food', sub: 'Pastry', cal: 327, p: 8.5, c: 26, f: 21, fib: 0.8, servings: [S.g100, S.custom('1 piece', 'adet', 105)], aliases: ['greggs sausage roll', 'greggs roll', 'greggs pork sausage roll'] }),
+  food({ id: 'gr-greggs-steak', name: 'Steak Bake', brand: 'Greggs', cat: 'Fast Food', sub: 'Pastry', cal: 238, p: 8, c: 22, f: 13, fib: 0.7, servings: [S.g100, S.custom('1 piece', 'adet', 144)], aliases: ['greggs steak bake', 'greggs steak', 'greggs steak pastry'] }),
 
   // ── Other Restaurants ───────────────────────────────────────
   food({ id: 'gr-fish-and-chips', name: 'Fish and Chips', brand: undefined, cat: 'Dünya Mutfağı', sub: 'British', cal: 200, p: 10, c: 17, f: 10, fib: 1.5, servings: [S.g100, S.custom('1 serving', 'porsiyon', 300)], aliases: ['fish n chips', 'battered fish and chips'] }),

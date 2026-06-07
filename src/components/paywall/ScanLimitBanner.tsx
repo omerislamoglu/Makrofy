@@ -15,9 +15,28 @@ export default function ScanLimitBanner({ limit, isPro = false }: ScanLimitBanne
   const { strings } = useLocale()
   const s = strings.scanBanner
 
-  if (isPro || limit.remaining === Infinity) return null
+  if (limit.remaining === Infinity) return null
 
   if (limit.isLimited) {
+    if (isPro) {
+      return (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="w-full bg-zinc-900 border border-zinc-800/50 rounded-2xl p-5 text-center"
+        >
+          <Lock size={24} className="mx-auto mb-3 text-zinc-500" />
+          <p className="text-[14px] font-semibold text-zinc-200 mb-1">
+            {s.proUsedTitle}
+          </p>
+          <p className="text-[12px] text-zinc-500">
+            {s.proUsedSubtitle}
+          </p>
+        </motion.div>
+      )
+    }
+
     return (
       <motion.button
         initial={{ opacity: 0, y: 8 }}
@@ -54,7 +73,7 @@ export default function ScanLimitBanner({ limit, isPro = false }: ScanLimitBanne
           <Zap size={13} className="text-white" />
         </div>
         <span className="text-[13px] text-zinc-300">
-          {s.remaining(limit.remaining)}
+          {isPro ? s.proRemaining(limit.remaining, limit.total) : s.remaining(limit.remaining)}
         </span>
       </div>
 

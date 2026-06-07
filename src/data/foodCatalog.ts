@@ -6,12 +6,14 @@ import { CATALOG_FOODS } from './catalog'
 import { GLOBAL_FOODS } from './globalFoods'
 import { GLOBAL_MARKET_PRODUCTS } from './globalMarketProducts'
 import { GLOBAL_RESTAURANT_ITEMS } from './globalRestaurantItems'
+import { MASSIVE_GLOBAL_EXPANSION } from './massiveGlobalExpansion'
 import type { AppLocale } from '../i18n'
 
 const GLOBAL_CATALOG: FoodCatalogItem[] = [
   ...GLOBAL_FOODS,
   ...GLOBAL_MARKET_PRODUCTS,
   ...GLOBAL_RESTAURANT_ITEMS,
+  ...MASSIVE_GLOBAL_EXPANSION,
 ]
 
 export const FOOD_CATEGORIES: Array<FoodCatalogCategory | 'Tümü'> = [
@@ -193,7 +195,13 @@ export function getFoodCatalog(locale?: AppLocale): FoodCatalogItem[] {
   // Turkish (default)
   const legacy = TURKISH_FOODS.map(toCatalogFood)
   const catalogIds = new Set(CATALOG_FOODS.map((f) => f.id))
-  const dedupedLegacy = legacy.filter((f) => !catalogIds.has(f.id))
+  const catalogNames = new Set(CATALOG_FOODS.map((f) => normalizeFoodText(f.name)))
+  const dedupedLegacy = legacy.filter(
+    (f) =>
+      !catalogIds.has(f.id) &&
+      !catalogIds.has(`cat-${f.id}`) &&
+      !catalogNames.has(normalizeFoodText(f.name)),
+  )
   return [...CATALOG_FOODS, ...dedupedLegacy, ...custom]
 }
 

@@ -87,7 +87,7 @@ function ProgramExerciseRow({
           placeholder={t.exercisePlaceholder}
           className="flex-1 bg-transparent text-white text-sm font-medium placeholder:text-zinc-500 outline-none"
         />
-        <button onClick={onDelete} className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors">
+        <button type="button" onClick={onDelete} className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors">
           <Trash2 size={14} />
         </button>
       </div>
@@ -141,24 +141,54 @@ function ProgramExerciseRow({
   )
 }
 
+function ConfirmDialog({ open, message, onCancel, onConfirm }: {
+  open: boolean; message: string
+  onCancel: () => void; onConfirm: () => void
+}) {
+  const { strings } = useLocale()
+  if (!open) return null
+  return (
+    <AnimatePresence>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center px-8">
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" onClick={onCancel} />
+        <motion.div initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2 }} className="relative bg-zinc-900 border border-zinc-800/60 rounded-2xl p-5 w-full max-w-xs shadow-xl">
+          <p className="text-[15px] font-semibold text-zinc-100 text-center mb-5">{message}</p>
+          <div className="flex gap-3">
+            <button type="button" onClick={onCancel} className="flex-1 h-11 rounded-xl text-[13px] font-medium text-zinc-300 bg-zinc-800 border border-zinc-700/50 hover:bg-zinc-700 transition-all">
+              {strings.common.cancel}
+            </button>
+            <button type="button" onClick={onConfirm} className="flex-1 h-11 rounded-xl text-[13px] font-medium text-white bg-red-600 hover:bg-red-500 transition-all flex items-center justify-center gap-2">
+              <Trash2 size={14} />
+              {strings.common.delete}
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  )
+}
+
 function ProgramDayCard({
   day,
   t,
   onChange,
   onDelete,
+  onConfirm,
 }: {
   day: ProgramDay
   t: WStrings
   onChange: (d: ProgramDay) => void
   onDelete: () => void
+  onConfirm: (message: string, action: () => void) => void
 }) {
   const [collapsed, setCollapsed] = useState(false)
   const haptics = useHaptics()
 
   const handleDelete = () => {
-    if (!window.confirm(t.confirmDeleteDay)) return
-    haptics.impactMedium()
-    onDelete()
+    onConfirm(t.confirmDeleteDay, () => {
+      haptics.impactMedium()
+      onDelete()
+    })
   }
 
   const addExercise = () => {
@@ -176,15 +206,16 @@ function ProgramDayCard({
   }
 
   const removeExercise = (idx: number) => {
-    if (!window.confirm(t.confirmDeleteExercise)) return
-    haptics.impactLight()
-    onChange({ ...day, exercises: day.exercises.filter((_, i) => i !== idx) })
+    onConfirm(t.confirmDeleteExercise, () => {
+      haptics.impactLight()
+      onChange({ ...day, exercises: day.exercises.filter((_, i) => i !== idx) })
+    })
   }
 
   return (
     <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="bg-zinc-900/50 rounded-2xl p-4 space-y-3">
       <div className="flex items-center gap-2">
-        <button onClick={() => { setCollapsed(!collapsed); haptics.impactLight() }} className="flex-1 flex items-center gap-2">
+        <button type="button" onClick={() => { setCollapsed(!collapsed); haptics.impactLight() }} className="flex-1 flex items-center gap-2">
           <ChevronRight size={14} className={`text-zinc-500 transition-transform ${collapsed ? '' : 'rotate-90'}`} />
           <input
             type="text"
@@ -196,7 +227,7 @@ function ProgramDayCard({
           />
         </button>
         <span className="text-[11px] text-zinc-500">{day.exercises.length} {t.noExercises}</span>
-        <button onClick={handleDelete} className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors">
+        <button type="button" onClick={handleDelete} className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors">
           <Trash2 size={14} />
         </button>
       </div>
@@ -213,7 +244,7 @@ function ProgramDayCard({
                 onDelete={() => removeExercise(idx)}
               />
             ))}
-            <button onClick={addExercise} className="flex items-center gap-1.5 text-zinc-400 hover:text-white text-xs transition-colors py-1">
+            <button type="button" onClick={addExercise} className="flex items-center gap-1.5 text-zinc-400 hover:text-white text-xs transition-colors py-1">
               <Plus size={12} />
               {t.addExercise}
             </button>
@@ -317,7 +348,7 @@ function WeekDayCard({
 
   return (
     <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-zinc-900/50 rounded-2xl p-4 space-y-3">
-      <button onClick={() => { setCollapsed(!collapsed); haptics.impactLight() }} className="w-full flex items-center gap-2">
+      <button type="button" onClick={() => { setCollapsed(!collapsed); haptics.impactLight() }} className="w-full flex items-center gap-2">
         <ChevronRight size={14} className={`text-zinc-500 transition-transform ${collapsed ? '' : 'rotate-90'}`} />
         <span className="text-white font-semibold text-sm flex-1 text-left">{day.dayName || '—'}</span>
         <span className="text-[11px] text-zinc-500">{day.exercises.length} {t.noExercises}</span>
@@ -365,7 +396,7 @@ function NoProgramView({
 
       <div className="space-y-3 mt-6">
         {/* Create custom */}
-        <button
+        <button type="button"
           onClick={onCreateCustom}
           className="w-full flex items-center gap-3 bg-white text-black rounded-2xl p-4 text-left active:scale-[0.98] transition-transform"
         >
@@ -379,7 +410,7 @@ function NoProgramView({
         </button>
 
         {/* Use Makrofy */}
-        <button
+        <button type="button"
           onClick={onUseMakrofy}
           className="w-full flex items-center gap-3 bg-zinc-800 text-white rounded-2xl p-4 text-left active:scale-[0.98] transition-transform"
         >
@@ -423,7 +454,12 @@ function ProgramEditorView({
 }) {
   const [draft, setDraft] = useState<WorkoutProgram>(() => JSON.parse(JSON.stringify(program)))
   const [saving, setSaving] = useState(false)
+  const [confirmState, setConfirmState] = useState<{ message: string; action: () => void } | null>(null)
   const haptics = useHaptics()
+
+  const requestConfirm = (message: string, action: () => void) => {
+    setConfirmState({ message, action })
+  }
 
   const addDay = () => {
     haptics.impactLight()
@@ -458,15 +494,16 @@ function ProgramEditorView({
   }
 
   const handleDelete = () => {
-    if (!window.confirm(t.confirmDeleteProgram)) return
-    haptics.impactMedium()
-    onDelete()
+    requestConfirm(t.confirmDeleteProgram, () => {
+      haptics.impactMedium()
+      onDelete()
+    })
   }
 
   return (
     <div className="space-y-4">
       {/* Back button */}
-      <button onClick={onBack} className="flex items-center gap-1.5 text-zinc-400 hover:text-white text-sm transition-colors">
+      <button type="button" onClick={onBack} className="flex items-center gap-1.5 text-zinc-400 hover:text-white text-sm transition-colors">
         <ArrowLeft size={16} />
         {t.backToTracker}
       </button>
@@ -499,13 +536,14 @@ function ProgramEditorView({
               t={t}
               onChange={(upd) => updateDay(idx, upd)}
               onDelete={() => removeDay(idx)}
+              onConfirm={requestConfirm}
             />
           ))}
         </AnimatePresence>
       </div>
 
       {/* Add day */}
-      <button
+      <button type="button"
         onClick={addDay}
         className="w-full flex items-center justify-center gap-2 bg-zinc-800 text-zinc-300 font-medium text-sm rounded-xl py-3 active:scale-[0.97] transition-transform"
       >
@@ -514,7 +552,7 @@ function ProgramEditorView({
       </button>
 
       {/* Save */}
-      <button
+      <button type="button"
         onClick={handleSave}
         disabled={saving}
         className="w-full flex items-center justify-center gap-2 bg-white text-black font-semibold text-sm rounded-xl py-3 active:scale-[0.97] transition-transform disabled:opacity-50"
@@ -524,13 +562,20 @@ function ProgramEditorView({
       </button>
 
       {/* Delete program */}
-      <button
+      <button type="button"
         onClick={handleDelete}
         className="w-full flex items-center justify-center gap-2 text-red-400/70 hover:text-red-400 text-xs py-2 transition-colors"
       >
         <Trash2 size={12} />
         {t.deleteProgram}
       </button>
+
+      <ConfirmDialog
+        open={confirmState !== null}
+        message={confirmState?.message ?? ''}
+        onCancel={() => setConfirmState(null)}
+        onConfirm={() => { confirmState?.action(); setConfirmState(null) }}
+      />
     </div>
   )
 }
@@ -663,7 +708,7 @@ function WeeklyLogView({
             {program.source === 'makrofy' ? t.makrofyBadge : t.customBadge}
           </span>
         </div>
-        <button onClick={onEditProgram} className="flex items-center gap-1 text-zinc-400 hover:text-white text-xs transition-colors">
+        <button type="button" onClick={onEditProgram} className="flex items-center gap-1 text-zinc-400 hover:text-white text-xs transition-colors">
           <Pencil size={12} />
           {t.editProgram}
         </button>
@@ -671,7 +716,7 @@ function WeeklyLogView({
 
       {/* Week navigator */}
       <div className="flex items-center justify-between bg-zinc-900/60 rounded-2xl px-4 py-3">
-        <button onClick={() => goWeek(-1)} className="p-1.5 text-zinc-400 hover:text-white transition-colors">
+        <button type="button" onClick={() => goWeek(-1)} className="p-1.5 text-zinc-400 hover:text-white transition-colors">
           <ChevronLeft size={20} />
         </button>
         <div className="text-center">
@@ -682,7 +727,7 @@ function WeeklyLogView({
             {formatWeekRange(currentMonday.toISOString().slice(0, 10))}
           </div>
         </div>
-        <button onClick={() => goWeek(1)} className="p-1.5 text-zinc-400 hover:text-white transition-colors">
+        <button type="button" onClick={() => goWeek(1)} className="p-1.5 text-zinc-400 hover:text-white transition-colors">
           <ChevronRight size={20} />
         </button>
       </div>
@@ -715,7 +760,7 @@ function WeeklyLogView({
             title={t.emptyWeekTitle}
             description={t.emptyWeekSubtitle}
           />
-          <button
+          <button type="button"
             onClick={createWeekFromProgram}
             disabled={creating}
             className="w-full flex items-center justify-center gap-2 bg-white text-black font-semibold text-sm rounded-xl py-3 active:scale-[0.97] transition-transform disabled:opacity-50"

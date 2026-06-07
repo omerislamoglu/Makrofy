@@ -33,7 +33,7 @@ import { useScanLimit } from '../hooks/useScanLimit'
 import { useHaptics, isNative } from '../hooks/useCapacitor'
 import { Capacitor } from '@capacitor/core'
 import { useLocale } from '../contexts/LocaleContext'
-import type { BodyMetrics, ActivityLevel, FitnessGoal, Gender } from '../types/user'
+import type { BodyMetrics, ActivityLevel, FitnessGoal, Gender, UserProfile } from '../types/user'
 import {
   calculateDailyGoalFromMetrics,
   calculateBMR,
@@ -133,7 +133,7 @@ function ToggleRow({
       label={label}
       sublabel={sublabel}
       trailing={
-        <button
+        <button type="button"
           onClick={() => onChange(!value)}
           className={`
             relative w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0
@@ -189,9 +189,13 @@ function Section({
 function DeleteAccountModal({
   onClose,
   onConfirm,
+  loading = false,
+  error,
 }: {
   onClose: () => void
   onConfirm: () => void
+  loading?: boolean
+  error?: string | null
 }) {
   const [inputValue, setInputValue] = useState('')
   const [step, setStep] = useState<'warn' | 'confirm'>('warn')
@@ -206,7 +210,7 @@ function DeleteAccountModal({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-end justify-center px-4 pb-8"
-      onClick={onClose}
+      onClick={loading ? undefined : onClose}
     >
       <motion.div
         initial={{ y: 100, opacity: 0 }}
@@ -241,13 +245,13 @@ function DeleteAccountModal({
                     </li>
                   ))}
                 </ul>
-                <button
+                <button type="button"
                   onClick={() => setStep('confirm')}
                   className="w-full bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl py-3 text-[14px] font-medium active:scale-[0.98] transition-all"
                 >
                   {s.continueButton}
                 </button>
-                <button
+                <button type="button"
                   onClick={onClose}
                   className="w-full bg-zinc-800 text-zinc-200 rounded-xl py-3 text-[14px] font-medium active:scale-[0.98] transition-all"
                 >
@@ -276,15 +280,21 @@ function DeleteAccountModal({
                 autoCorrect="off"
               />
               <div className="space-y-3">
-                <button
+                {error && (
+                  <p className="rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2 text-[12px] text-red-300 text-center">
+                    {error}
+                  </p>
+                )}
+                <button type="button"
                   onClick={onConfirm}
-                  disabled={!canDelete}
+                  disabled={!canDelete || loading}
                   className="w-full bg-red-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded-xl py-3 text-[14px] font-bold active:scale-[0.98] transition-all disabled:cursor-not-allowed"
                 >
-                  {s.deleteForever}
+                  {loading ? s.deleting : s.deleteForever}
                 </button>
-                <button
+                <button type="button"
                   onClick={onClose}
+                  disabled={loading}
                   className="w-full bg-zinc-800 text-zinc-200 rounded-xl py-3 text-[14px] font-medium active:scale-[0.98] transition-all"
                 >
                   {s.giveUp}
@@ -318,7 +328,7 @@ function ProfileTabSwitcher({
         const isActive = tab === t.value
         const Icon = t.icon
         return (
-          <button
+          <button type="button"
             key={t.value}
             id={`profile-tab-${t.value}`}
             onClick={() => onChange(t.value)}
@@ -460,7 +470,7 @@ function GoalSetupSheet({
         </div>
 
         {/* Scrollable body */}
-        <div className="overflow-y-auto" style={{ maxHeight: 'calc(92dvh - 130px)' }}>
+        <div className="overflow-y-auto smooth-scroll-area" style={{ maxHeight: 'calc(92dvh - 130px)' }}>
           <div className="px-5 py-4 space-y-6">
 
             {/* Gender */}
@@ -765,9 +775,9 @@ function BodyMetricsCard({
 // ─── Ana Sayfa ───────────────────────────────────────────────────────────────
 
 export default function ProfilePage() {
-  const { user, signOut, updateProfile } = useAuth()
+  const { user, signOut, deleteAccount, updateProfile } = useAuth()
   const { isPro, restore } = useSubscription(user?.uid)
-  const { limit } = useScanLimit(user?.uid)
+  const { limit } = useScanLimit(user?.uid, user?.isPro)
   const navigate = useNavigate()
   const haptics = useHaptics()
 
@@ -779,11 +789,18 @@ export default function ProfilePage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showGoalSheet, setShowGoalSheet] = useState(false)
   const [restoringPurchase, setRestoringPurchase] = useState(false)
+  const [deletingAccount, setDeletingAccount] = useState(false)
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null)
+  const [restoreMessage, setRestoreMessage] = useState<{ text: string; success: boolean } | null>(null)
 
-  // Bildirim tercihleri (local state — gerçek projede Firestore'dan gelir)
-  const [mealReminders, setMealReminders] = useState(false)
-  const [weeklySummary, setWeeklySummary] = useState(true)
-  const [promoNotifs, setPromoNotifs] = useState(false)
+  // Bildirim tercihleri
+  const mealReminders = user?.mealReminders ?? false
+  const weeklySummary = user?.weeklySummary ?? true
+  const promoNotifs = user?.promoNotifs ?? false
+
+  const updatePreference = (updates: Partial<UserProfile>) => {
+    updateProfile(updates)
+  }
 
   const handleTabChange = (t: ProfileTab) => {
     haptics.selectionChanged()
@@ -796,13 +813,23 @@ export default function ProfilePage() {
     navigate('/auth')
   }
 
-  const handleDeleteAccount = useCallback(() => {
+  const handleDeleteAccount = useCallback(async () => {
+    if (deletingAccount) return
     haptics.notificationError()
-    setShowDeleteModal(false)
-    // Gerçek projede: Firebase Auth user.delete() + Firestore temizleme
-    signOut()
-    navigate('/auth')
-  }, [haptics, signOut, navigate])
+    setDeletingAccount(true)
+    setDeleteAccountError(null)
+    try {
+      await deleteAccount()
+      setShowDeleteModal(false)
+      navigate('/auth', { replace: true })
+    } catch (error) {
+      console.error('[Account] delete failed', error)
+      setDeleteAccountError(s.deleteError)
+      haptics.notificationError()
+    } finally {
+      setDeletingAccount(false)
+    }
+  }, [deleteAccount, deletingAccount, haptics, navigate, s.deleteError])
 
   const openURL = (url: string) => {
     if (isNative) {
@@ -977,24 +1004,34 @@ export default function ProfilePage() {
                   onPress={async () => {
                     if (!user || restoringPurchase) return
                     haptics.impactLight()
+                    setRestoreMessage(null)
                     setRestoringPurchase(true)
                     try {
                       const result = await restore()
                       if (result.success) {
                         updateProfile({ isPro: true })
+                        setRestoreMessage({ text: s.active, success: true })
                         haptics.notificationSuccess()
                       } else {
                         haptics.notificationError()
-                        alert(result.error || s.noActiveFound)
+                        setRestoreMessage({ text: result.error || s.noActiveFound, success: false })
                       }
                     } catch {
                       haptics.notificationError()
-                      alert(s.restoreError)
+                      setRestoreMessage({ text: s.restoreError, success: false })
                     } finally {
                       setRestoringPurchase(false)
+                      setTimeout(() => setRestoreMessage(null), 5000)
                     }
                   }}
                 />
+                {restoreMessage && (
+                  <div className={`px-4 py-3 ${restoreMessage.success ? 'bg-emerald-500/10' : 'bg-red-500/10'}`}>
+                    <p className={`text-[12px] ${restoreMessage.success ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {restoreMessage.text}
+                    </p>
+                  </div>
+                )}
               </Section>
 
               {/* Kullanım */}
@@ -1050,7 +1087,7 @@ export default function ProfilePage() {
                   value={mealReminders}
                   onChange={(v) => {
                     haptics.selectionChanged()
-                    setMealReminders(v)
+                    updatePreference({ mealReminders: v })
                     if (v && isNative) openNotificationSettings()
                   }}
                 />
@@ -1059,14 +1096,14 @@ export default function ProfilePage() {
                   label={s.weeklySummary}
                   sublabel={s.weeklySummarySub}
                   value={weeklySummary}
-                  onChange={(v) => { haptics.selectionChanged(); setWeeklySummary(v) }}
+                  onChange={(v) => { haptics.selectionChanged(); updatePreference({ weeklySummary: v }) }}
                 />
                 <ToggleRow
                   icon={<Mail size={16} className="text-zinc-400" />}
                   label={s.promoNotifs}
                   sublabel={s.promoNotifsSub}
                   value={promoNotifs}
-                  onChange={(v) => { haptics.selectionChanged(); setPromoNotifs(v) }}
+                  onChange={(v) => { haptics.selectionChanged(); updatePreference({ promoNotifs: v }) }}
                 />
                 <SettingsRow
                   icon={<Settings size={16} className="text-zinc-400" />}
@@ -1144,6 +1181,7 @@ export default function ProfilePage() {
                   sublabel={s.deleteAccountSub}
                   onPress={() => {
                     haptics.notificationWarning()
+                    setDeleteAccountError(null)
                     setShowDeleteModal(true)
                   }}
                   destructive
@@ -1176,8 +1214,10 @@ export default function ProfilePage() {
       <AnimatePresence>
         {showDeleteModal && (
           <DeleteAccountModal
-            onClose={() => { haptics.impactLight(); setShowDeleteModal(false) }}
+            onClose={() => { haptics.impactLight(); setDeleteAccountError(null); setShowDeleteModal(false) }}
             onConfirm={handleDeleteAccount}
+            loading={deletingAccount}
+            error={deleteAccountError}
           />
         )}
       </AnimatePresence>

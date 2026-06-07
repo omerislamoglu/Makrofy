@@ -2,27 +2,35 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import Button from '../components/ui/Button'
 import MakrofyLogo from '../components/ui/MakrofyLogo'
-
-const steps = [
-  {
-    icon: '📸',
-    title: 'AI ile Tara',
-    description: 'Yemeğinin fotoğrafını çek, anında besin değerlerini öğren.',
-  },
-  {
-    icon: '📊',
-    title: 'Makrolarını Bil',
-    description: 'Protein, karbonhidrat, yağ ve kaloriyi tek bakışta gör.',
-  },
-  {
-    icon: '🎯',
-    title: 'Düzenli Kal',
-    description: 'Basit ve yargısız takip ile daha iyi alışkanlıklar edin.',
-  },
-]
+import { useLocale } from '../contexts/LocaleContext'
 
 export default function OnboardingPage() {
   const navigate = useNavigate()
+  const { locale } = useLocale()
+  const isEN = locale === 'en'
+  const steps = [
+    {
+      icon: '📸',
+      title: isEN ? 'Scan with AI' : 'AI ile Tara',
+      description: isEN
+        ? 'Take a meal photo and get instant nutrition estimates.'
+        : 'Yemeğinin fotoğrafını çek, anında besin değerlerini öğren.',
+    },
+    {
+      icon: '📊',
+      title: isEN ? 'Know Your Macros' : 'Makrolarını Bil',
+      description: isEN
+        ? 'See protein, carbs, fat, and calories at a glance.'
+        : 'Protein, karbonhidrat, yağ ve kaloriyi tek bakışta gör.',
+    },
+    {
+      icon: '🎯',
+      title: isEN ? 'Stay Consistent' : 'Düzenli Kal',
+      description: isEN
+        ? 'Build better habits with simple, judgment-free tracking.'
+        : 'Basit ve yargısız takip ile daha iyi alışkanlıklar edin.',
+    },
+  ]
 
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 safe-area-top">
@@ -71,7 +79,7 @@ export default function OnboardingPage() {
             fullWidth
             onClick={() => navigate('/auth')}
           >
-            Başla
+            {isEN ? 'Get Started' : 'Başla'}
           </Button>
         </motion.div>
 
@@ -81,10 +89,9 @@ export default function OnboardingPage() {
           transition={{ delay: 0.9 }}
           className="text-[11px] text-zinc-700 mt-6"
         >
-          Tüm besin değerleri tahminidir.
+          {isEN ? 'All nutrition values are estimates.' : 'Tüm besin değerleri tahminidir.'}
         </motion.p>
       </motion.div>
     </div>
   )
 }
-

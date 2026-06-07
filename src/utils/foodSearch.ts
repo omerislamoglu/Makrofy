@@ -6,39 +6,111 @@ const FAVORITES_KEY = 'makrofy_food_favorites'
 const RECENTS_KEY = 'makrofy_recent_foods'
 const CUSTOM_FOODS_KEY = 'makrofy_custom_foods'
 
+// ─── Common misspellings → correct form (normalized, no diacritics) ────────
+const COMMON_MISSPELLINGS: Record<string, string> = {
+  // Turkish food typos
+  yuurta: 'yumurta', yumuta: 'yumurta', yumruta: 'yumurta', yuurmta: 'yumurta', yumurt: 'yumurta', yumrota: 'yumurta',
+  ekmk: 'ekmek', ekemk: 'ekmek', ekmke: 'ekmek', ekmekk: 'ekmek',
+  peyir: 'peynir', peynr: 'peynir', peynri: 'peynir', peyinr: 'peynir',
+  tavk: 'tavuk', tvuk: 'tavuk', tavuuk: 'tavuk', tauvk: 'tavuk', tavku: 'tavuk',
+  makrna: 'makarna', maakrna: 'makarna', makrana: 'makarna', makarrna: 'makarna',
+  plav: 'pilav', pilavv: 'pilav', pialv: 'pilav', piilav: 'pilav',
+  yourt: 'yogurt', yogrt: 'yogurt', yogutr: 'yogurt', yoourt: 'yogurt',
+  cikoata: 'cikolata', cioklata: 'cikolata', cikoalat: 'cikolata', ciklata: 'cikolata',
+  somn: 'somon', smoon: 'somon', somoon: 'somon',
+  baklva: 'baklava', baklavaa: 'baklava', baklav: 'baklava',
+  donr: 'doner', donerr: 'doner', donre: 'doner', dooner: 'doner',
+  hambrger: 'hamburger', hambuger: 'hamburger', hamburgr: 'hamburger', haamburger: 'hamburger',
+  lahmcun: 'lahmacun', lahmajun: 'lahmacun', lahamcun: 'lahmacun',
+  kofte: 'kofte', koft: 'kofte', koftee: 'kofte',
+  ispnak: 'ispanak', ispanakk: 'ispanak',
+  manti: 'manti', mantii: 'manti',
+  borek: 'borek', borekk: 'borek', bork: 'borek',
+  corba: 'corba', corb: 'corba', coorba: 'corba',
+  patats: 'patates', pataes: 'patates', patattes: 'patates',
+  simit: 'simit', simitt: 'simit', simt: 'simit',
+  pogca: 'pogaca', pogacaa: 'pogaca',
+  sucuk: 'sucuk', scuk: 'sucuk', sucukk: 'sucuk',
+  pastirma: 'pastirma', pastrma: 'pastirma',
+  kunfe: 'kunefe', kunefee: 'kunefe', kuenfe: 'kunefe',
+  sutlc: 'sutlac', sutlacv: 'sutlac', sutlacc: 'sutlac',
+  menenm: 'menemen', menemn: 'menemen',
+  // English food typos
+  chiken: 'chicken', chcken: 'chicken', chicke: 'chicken', chikcen: 'chicken',
+  salomon: 'salmon', salmn: 'salmon', samon: 'salmon',
+  brocoli: 'broccoli', brocolli: 'broccoli', broccolli: 'broccoli',
+  avacado: 'avocado', avocdo: 'avocado', avacodo: 'avocado',
+  banan: 'banana', bananna: 'banana', bannana: 'banana',
+  tomatoe: 'tomato', tomto: 'tomato', tomatoo: 'tomato',
+  cucmber: 'cucumber', cucumbr: 'cucumber',
+  sandwch: 'sandwich', sandwhich: 'sandwich', sanwich: 'sandwich',
+  omlette: 'omlet', omeltte: 'omlet',
+  piza: 'pizza', pizzaa: 'pizza', pzza: 'pizza',
+  burgr: 'burger', buger: 'burger', brger: 'burger',
+  cofee: 'coffee', coffie: 'coffee', coffe: 'coffee',
+  chocolte: 'chocolate', choclate: 'chocolate', chocolat: 'chocolate',
+  yougurt: 'yogurt', youghurt: 'yogurt', yoghrt: 'yogurt',
+  protien: 'protein', protin: 'protein', protine: 'protein',
+  straberry: 'strawberry', stawberry: 'strawberry',
+  bluberry: 'blueberry', bluebarry: 'blueberry',
+}
+
+function correctMisspelling(text: string): string {
+  // Try full text first
+  if (COMMON_MISSPELLINGS[text]) return COMMON_MISSPELLINGS[text]
+  // Try each word
+  const words = text.split(' ')
+  let changed = false
+  const corrected = words.map(w => {
+    if (COMMON_MISSPELLINGS[w]) { changed = true; return COMMON_MISSPELLINGS[w] }
+    return w
+  })
+  return changed ? corrected.join(' ') : text
+}
+
 const SYNONYMS: Record<string, string[]> = {
-  // Protein — bilingual
-  tavuk: ['chicken', 'kanat', 'but', 'gogus'],
-  chicken: ['tavuk', 'poultry'],
+  // ── Protein — bilingual ──
+  tavuk: ['chicken', 'kanat', 'but', 'gogus', 'piliç', 'pilic'],
+  chicken: ['tavuk', 'poultry', 'pilic'],
   yumurta: ['egg', 'haslama', 'sahanda', 'omlet'],
   egg: ['yumurta', 'eggs'],
   eggs: ['egg', 'yumurta'],
-  balik: ['fish', 'somon', 'levrek'],
+  balik: ['fish', 'somon', 'levrek', 'hamsi', 'cipura'],
   fish: ['balik', 'seafood'],
   salmon: ['somon'],
   somon: ['salmon'],
   tuna: ['ton baligi', 'ton'],
   shrimp: ['karides'],
+  karides: ['shrimp', 'prawn'],
   steak: ['biftek', 'antrikot', 'bonfile'],
   turkey: ['hindi'],
+  hindi: ['turkey'],
   beef: ['dana', 'et', 'sigir'],
+  dana: ['beef', 'sigir', 'et'],
+  kuzu: ['lamb', 'mutton'],
+  lamb: ['kuzu'],
   pork: ['domuz'],
   tofu: ['tofu', 'soy'],
-  // Carbs
+  et: ['meat', 'dana', 'sigir', 'kuzu'],
+  meat: ['et', 'beef', 'dana'],
+  // ── Carbs ──
   pirinc: ['rice', 'pilav'],
   rice: ['pirinc', 'pilav'],
   pilav: ['pirinc', 'rice'],
   bulgur: ['bulgur pilav', 'bulgur pilavi'],
-  ekmek: ['bread', 'dilim'],
-  bread: ['ekmek', 'toast', 'loaf'],
+  ekmek: ['beyaz ekmek', 'tam bugday ekmek', 'bread', 'dilim'],
+  bread: ['white bread', 'whole wheat bread', 'ekmek', 'toast', 'loaf'],
   pasta: ['makarna', 'spaghetti', 'noodle'],
-  makarna: ['pasta', 'spaghetti'],
+  makarna: ['pasta', 'spaghetti', 'noodle'],
+  noodle: ['makarna', 'noodles', 'eriste'],
   oatmeal: ['yulaf', 'porridge', 'oats'],
   yulaf: ['oatmeal', 'oats'],
   quinoa: ['kinoa'],
+  kinoa: ['quinoa'],
   potato: ['patates'],
   patates: ['potato'],
-  // Fruits
+  simit: ['simit', 'gevrek', 'turkish bagel'],
+  // ── Fruits ──
   muz: ['banana'],
   banana: ['muz'],
   apple: ['elma'],
@@ -46,16 +118,74 @@ const SYNONYMS: Record<string, string[]> = {
   orange: ['portakal'],
   portakal: ['orange'],
   strawberry: ['cilek', 'strawberries'],
+  cilek: ['strawberry'],
   blueberry: ['yaban mersini', 'blueberries'],
-  // Dairy
-  yogurt: ['yoğurt', 'suzme', 'kefir', 'greek yogurt'],
+  pear: ['armut'],
+  armut: ['pear'],
+  peach: ['seftali'],
+  seftali: ['peach'],
+  cherry: ['kiraz', 'visne'],
+  kiraz: ['cherry'],
+  visne: ['sour cherry', 'cherry'],
+  grape: ['uzum', 'grapes'],
+  uzum: ['grape'],
+  watermelon: ['karpuz'],
+  karpuz: ['watermelon'],
+  kavun: ['melon', 'cantaloupe'],
+  melon: ['kavun'],
+  apricot: ['kayisi'],
+  kayisi: ['apricot'],
+  fig: ['incir'],
+  incir: ['fig'],
+  pomegranate: ['nar'],
+  nar: ['pomegranate'],
+  lemon: ['limon'],
+  limon: ['lemon'],
+  mango: ['mango'],
+  ananas: ['pineapple'],
+  pineapple: ['ananas'],
+  avokado: ['avocado'],
+  avocado: ['avokado'],
+  kivi: ['kiwi'],
+  kiwi: ['kivi'],
+  // ── Vegetables ──
+  sebze: ['vegetable', 'vegetables', 'veggie'],
+  vegetable: ['sebze'],
+  domates: ['tomato'],
+  tomato: ['domates'],
+  salatalik: ['cucumber'],
+  cucumber: ['salatalik'],
+  havuc: ['carrot'],
+  carrot: ['havuc'],
+  brokoli: ['broccoli'],
+  broccoli: ['brokoli'],
+  ispanak: ['spinach'],
+  spinach: ['ispanak'],
+  biber: ['pepper', 'capsicum'],
+  pepper: ['biber'],
+  sogan: ['onion'],
+  onion: ['sogan'],
+  mantar: ['mushroom'],
+  mushroom: ['mantar'],
+  patlican: ['eggplant', 'aubergine'],
+  eggplant: ['patlican'],
+  kabak: ['zucchini', 'squash'],
+  zucchini: ['kabak'],
+  marul: ['lettuce'],
+  lettuce: ['marul'],
+  // ── Dairy ──
+  yogurt: ['yogurt', 'suzme', 'kefir', 'greek yogurt'],
   'greek yogurt': ['yogurt', 'suzme yogurt'],
   cheese: ['peynir', 'cheddar', 'mozzarella'],
-  peynir: ['cheese'],
+  peynir: ['cheese', 'beyaz peynir', 'kasar'],
+  kasar: ['cheddar', 'cheese', 'kasar peynir'],
   milk: ['sut'],
   sut: ['milk'],
   butter: ['tereyagi'],
-  // Drinks
+  tereyagi: ['butter'],
+  kaymak: ['cream', 'clotted cream'],
+  cream: ['kaymak', 'krema'],
+  // ── Drinks ──
   ayran: ['yogurt drink', 'ayran', 'sutlu icecek'],
   kahve: ['coffee', 'latte', 'espresso', 'americano'],
   coffee: ['kahve', 'latte', 'espresso', 'americano'],
@@ -63,9 +193,17 @@ const SYNONYMS: Record<string, string[]> = {
   kola: ['cola', 'coke'],
   cola: ['kola', 'coke'],
   coke: ['cola', 'kola'],
-  juice: ['meyve suyu'],
+  juice: ['meyve suyu', 'su'],
   smoothie: ['smoothie'],
-  // Nuts
+  cay: ['tea', 'cay'],
+  tea: ['cay'],
+  su: ['water'],
+  water: ['su'],
+  bira: ['beer'],
+  beer: ['bira'],
+  sarap: ['wine'],
+  wine: ['sarap'],
+  // ── Nuts ──
   badem: ['almond'],
   almond: ['badem', 'almonds'],
   ceviz: ['walnut'],
@@ -73,36 +211,85 @@ const SYNONYMS: Record<string, string[]> = {
   findik: ['hazelnut'],
   hazelnut: ['findik'],
   'peanut butter': ['fistik ezmesi'],
-  // Sweets
-  cikolata: ['chocolate'],
+  'fistik ezmesi': ['peanut butter'],
+  fistik: ['peanut', 'yer fistigi'],
+  peanut: ['fistik', 'yer fistigi'],
+  kaju: ['cashew'],
+  cashew: ['kaju'],
+  // ── Sweets ──
+  cikolata: ['chocolate', 'cacao'],
   chocolate: ['cikolata'],
   cips: ['chips'],
   chips: ['cips', 'crisps'],
-  // Turkish dishes
+  dondurma: ['ice cream', 'gelato'],
+  'ice cream': ['dondurma'],
+  kek: ['cake'],
+  cake: ['kek', 'pasta'],
+  kurabiye: ['cookie', 'biscuit'],
+  cookie: ['kurabiye', 'biskuvi'],
+  // ── Turkish dishes ──
   doner: ['doner kebab', 'kebab', 'tavuk doner', 'et doner'],
   kebab: ['doner', 'kebap', 'sis', 'adana'],
   kebap: ['kebab', 'doner', 'sis', 'adana'],
   corba: ['soup', 'corbasi', 'mercimek', 'yayla'],
   soup: ['corba'],
-  // Fast food
+  lahmacun: ['lahmacun', 'turkish pizza'],
+  pide: ['pide', 'turkish flatbread'],
+  gozleme: ['gozleme', 'turkish crepe'],
+  borek: ['borek', 'pastry'],
+  manti: ['manti', 'turkish dumpling', 'ravioli'],
+  dolma: ['dolma', 'sarma', 'stuffed'],
+  sarma: ['dolma', 'wrap', 'roll'],
+  baklava: ['baklava'],
+  kunefe: ['kunefe', 'kanafeh'],
+  sutlac: ['rice pudding', 'sutlac'],
+  'rice pudding': ['sutlac'],
+  lokma: ['lokma', 'fried dough'],
+  // ── Fast food ──
   bigmac: ['big mac', 'hamburger'],
   'big mac': ['bigmac', 'hamburger', 'mcdonalds'],
   whopper: ['burger', 'hamburger', 'burger king'],
   burger: ['hamburger', 'cheeseburger'],
+  hamburger: ['burger', 'cheeseburger'],
   pizza: ['pizza'],
   burrito: ['burrito'],
   taco: ['taco'],
   sushi: ['sushi', 'nigiri', 'roll'],
-  // Meals
+  nugget: ['nuggets', 'chicken nugget'],
+  nuggets: ['nugget', 'chicken nuggets'],
+  // ── Meals ──
   salad: ['salata'],
-  salata: ['salad'],
+  salata: ['salad', 'coban salata'],
   sandwich: ['sandvic', 'tost'],
-  wrap: ['dürüm', 'wrap'],
-  bowl: ['bowl'],
-  // Supplements
+  sandvic: ['sandwich', 'tost'],
+  tost: ['toast', 'sandwich', 'sandvic'],
+  wrap: ['durum', 'wrap'],
+  durum: ['wrap', 'durum'],
+  bowl: ['bowl', 'kase'],
+  // ── Cooking methods (cross-reference) ──
+  izgara: ['grilled', 'grill'],
+  grilled: ['izgara'],
+  haslama: ['boiled'],
+  boiled: ['haslama'],
+  kizartma: ['fried'],
+  fried: ['kizartma', 'tava'],
+  tava: ['pan fried', 'fried', 'kizartma'],
+  firin: ['baked', 'oven', 'firinda'],
+  baked: ['firin', 'firinda'],
+  buharda: ['steamed'],
+  steamed: ['buharda'],
+  // ── Supplements ──
   whey: ['whey protein', 'protein shake'],
   'protein shake': ['whey', 'protein'],
   'protein bar': ['protein bar'],
+  protein: ['protein', 'whey'],
+  // ── Brand shortcuts ──
+  mc: ['mcdonalds', 'big mac', 'mcchicken'],
+  mcdonalds: ['big mac', 'mcchicken', 'mc'],
+  bk: ['burger king', 'whopper'],
+  'burger king': ['whopper', 'bk'],
+  sbux: ['starbucks', 'latte', 'frappuccino'],
+  starbucks: ['sbux', 'latte', 'frappuccino'],
 }
 
 export function normalizeFoodText(text: string): string {
@@ -121,7 +308,7 @@ export function normalizeFoodText(text: string): string {
 }
 
 function editDistance(a: string, b: string): number {
-  if (Math.abs(a.length - b.length) > 2) return 99
+  if (Math.abs(a.length - b.length) > 3) return 99
   const dp = Array.from({ length: a.length + 1 }, (_, i) => [i])
   for (let j = 1; j <= b.length; j += 1) dp[0][j] = j
   for (let i = 1; i <= a.length; i += 1) {
@@ -138,13 +325,33 @@ function editDistance(a: string, b: string): number {
 
 function scoreFood(food: FoodCatalogItem, query: string): number {
   if (!query) return 1
+  // Try misspelling correction first
+  const correctedQuery = correctMisspelling(query)
   const expandedTerms = [query, ...(SYNONYMS[query] ?? [])]
+  // Also expand corrected form if different
+  if (correctedQuery !== query) {
+    expandedTerms.push(correctedQuery, ...(SYNONYMS[correctedQuery] ?? []))
+  }
   const haystack = food.searchableText
   const name = normalizeFoodText(food.name)
+  const brand = normalizeFoodText(food.brand ?? '')
+  const aliases = food.aliases.map(normalizeFoodText)
+  const compact = (value: string) => value.replace(/\s+/g, '')
+  const compactQuery = compact(query)
+  const compactName = compact(name)
+  const compactBrand = compact(brand)
+  const compactAliases = aliases.map(compact)
   let score = 0
 
   for (const term of expandedTerms) {
+    const compactTerm = compact(term)
     if (name === term) score = Math.max(score, 100)
+    if (brand === term) score = Math.max(score, 98)
+    if (aliases.some((alias) => alias === term)) score = Math.max(score, 96)
+    if (compactBrand === compactTerm || compactBrand === compactQuery) score = Math.max(score, 98)
+    if (compactName === compactTerm || compactName.startsWith(compactTerm)) score = Math.max(score, 92)
+    if (compactAliases.some((alias) => alias === compactTerm)) score = Math.max(score, 96)
+    if (aliases.some((alias) => alias.startsWith(`${term} `) || alias.endsWith(` ${term}`))) score = Math.max(score, 88)
     if (name.startsWith(term)) score = Math.max(score, 85)
     if (haystack.includes(term)) score = Math.max(score, 70)
   }
@@ -152,7 +359,7 @@ function scoreFood(food: FoodCatalogItem, query: string): number {
   const queryTokens = query.split(' ').filter(Boolean)
   const hayTokens = haystack.split(' ').filter(Boolean)
   const tokenHits = queryTokens.filter((token) =>
-    hayTokens.some((hayToken) => hayToken.includes(token) || editDistance(token, hayToken) <= (token.length > 5 ? 2 : 1))
+    hayTokens.some((hayToken) => hayToken.includes(token) || editDistance(token, hayToken) <= (token.length > 5 ? 3 : 2))
   ).length
 
   if (queryTokens.length > 0 && tokenHits === queryTokens.length) score = Math.max(score, 55 + tokenHits * 5)
@@ -287,6 +494,20 @@ export function matchFoodToCatalog(
     if (score > bestScore) {
       bestScore = score
       best = food
+    }
+  }
+
+  // If no match, try misspelling correction as separate query
+  if (bestScore < threshold) {
+    const corrected = correctMisspelling(normalized)
+    if (corrected !== normalized) {
+      for (const food of catalog) {
+        const score = scoreFood(food, corrected)
+        if (score > bestScore) {
+          bestScore = score
+          best = food
+        }
+      }
     }
   }
 

@@ -38,8 +38,8 @@ export interface ScanLimit {
   resetsAt?: string // ISO date when free scans reset (if applicable)
 }
 
-export const FREE_SCAN_LIMIT = 5
-export const PRO_DAILY_SCAN_LIMIT = 10
+export const FREE_DAILY_SCAN_LIMIT = 0
+export const PRO_DAILY_SCAN_LIMIT = 5
 
 // ─── Plan Pricing ───────────────────────────────────────────────────────────
 export interface PlanPricing {

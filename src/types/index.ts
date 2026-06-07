@@ -65,6 +65,6 @@ export type {
   PaywallFeature,
 } from './subscription'
 export {
-  FREE_SCAN_LIMIT,
+  FREE_DAILY_SCAN_LIMIT,
   PLAN_PRICES,
 } from './subscription'

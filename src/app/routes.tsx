@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Navigate, Routes, Route } from 'react-router-dom'
 import AppLayout from '../components/layout/AppLayout'
 import ProtectedRoute from '../components/layout/ProtectedRoute'
 import OnboardingPage from '../pages/OnboardingPage'
@@ -46,6 +46,8 @@ export default function AppRoutes() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/workout" element={<WorkoutTrackerPage />} />
       </Route>
+
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }

@@ -1,5 +1,5 @@
 import { HttpsError } from "firebase-functions/v2/https";
-import type { AnalyzeMealRequest, MealType } from "./types";
+import type { MealType } from "./types";
 
 const VALID_MEAL_TYPES = new Set<MealType>([
   "breakfast",
@@ -8,13 +8,22 @@ const VALID_MEAL_TYPES = new Set<MealType>([
   "snack",
 ]);
 
+export interface ValidatedRequest {
+  /** Resolved image source — either an HTTPS/gs URL or a data:image base64 URI */
+  imageUrl: string;
+  /** True when imageUrl is a base64 data URI (should NOT be saved to Firestore) */
+  isDataUrl: boolean;
+  mealTypeHint: MealType | undefined;
+  gramNotes: string | undefined;
+  dateKey: string | undefined;
+}
+
 /**
  * Validate the incoming request payload.
+ * Accepts either `imageUrl` (web path) or `imageData` (native iOS base64).
  * Throws HttpsError on any invalid input — never trust the client.
  */
-export function validateRequest(
-  data: unknown
-): { imageUrl: string; mealTypeHint: MealType | undefined; gramNotes: string | undefined; dateKey: string | undefined } {
+export function validateRequest(data: unknown): ValidatedRequest {
   if (!data || typeof data !== "object") {
     throw new HttpsError(
       "invalid-argument",
@@ -24,39 +33,57 @@ export function validateRequest(
 
   const body = data as Record<string, unknown>;
 
-  // ── imageUrl (required) ──────────────────────────────────────────────
-  const imageUrl = body.imageUrl;
+  // ── Resolve image source: imageData (native) or imageUrl (web) ──────
+  let imageUrl: string;
+  let isDataUrl = false;
 
-  if (typeof imageUrl !== "string" || imageUrl.trim().length === 0) {
+  if (typeof body.imageData === "string" && body.imageData.trim().length > 0) {
+    // Native iOS path: base64 data URL
+    const trimmed = body.imageData.trim();
+    if (!/^data:image\/(jpeg|jpg|png|webp|heic|heif);base64,/i.test(trimmed)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "imageData must be a data:image/... base64 URI."
+      );
+    }
+    if (trimmed.length > 15 * 1024 * 1024) {
+      throw new HttpsError(
+        "invalid-argument",
+        "imageData exceeds the maximum allowed length (15 MB)."
+      );
+    }
+    imageUrl = trimmed;
+    isDataUrl = true;
+  } else if (typeof body.imageUrl === "string" && body.imageUrl.trim().length > 0) {
+    // Web path: HTTPS or gs:// URL
+    const trimmed = body.imageUrl.trim();
+    const isHttpsOrStorage = trimmed.startsWith("https://") || trimmed.startsWith("gs://");
+    const isDataImage = /^data:image\/(jpeg|jpg|png|webp|heic|heif);base64,/i.test(trimmed);
+
+    if (!isHttpsOrStorage && !isDataImage) {
+      throw new HttpsError(
+        "invalid-argument",
+        "imageUrl must be an https://, gs://, or data:image base64 URI."
+      );
+    }
+    if (isHttpsOrStorage && trimmed.length > 2048) {
+      throw new HttpsError(
+        "invalid-argument",
+        "imageUrl exceeds the maximum allowed length."
+      );
+    }
+    if (isDataImage && trimmed.length > 15 * 1024 * 1024) {
+      throw new HttpsError(
+        "invalid-argument",
+        "imageUrl data exceeds the maximum allowed length."
+      );
+    }
+    imageUrl = trimmed;
+    isDataUrl = isDataImage;
+  } else {
     throw new HttpsError(
       "invalid-argument",
-      "imageUrl is required and must be a non-empty string."
-    );
-  }
-
-  const isHttpsOrStorageUrl = imageUrl.startsWith("https://") || imageUrl.startsWith("gs://");
-  const isDataImageUrl = /^data:image\/(jpeg|jpg|png|webp|heic|heif);base64,/i.test(imageUrl);
-
-  // Basic image source sanity. Native apps can send a data URL because the
-  // Capacitor native auth session is not automatically shared with Web Storage.
-  if (!isHttpsOrStorageUrl && !isDataImageUrl) {
-    throw new HttpsError(
-      "invalid-argument",
-      "imageUrl must be an https://, gs://, or data:image base64 URI."
-    );
-  }
-
-  if (isHttpsOrStorageUrl && imageUrl.length > 2048) {
-    throw new HttpsError(
-      "invalid-argument",
-      "imageUrl exceeds the maximum allowed length."
-    );
-  }
-
-  if (isDataImageUrl && imageUrl.length > 15 * 1024 * 1024) {
-    throw new HttpsError(
-      "invalid-argument",
-      "imageUrl data exceeds the maximum allowed length."
+      "imageUrl or imageData is required."
     );
   }
 
@@ -106,5 +133,5 @@ export function validateRequest(
     dateKey = body.dateKey;
   }
 
-  return { imageUrl: imageUrl.trim(), mealTypeHint, gramNotes, dateKey };
+  return { imageUrl, isDataUrl, mealTypeHint, gramNotes, dateKey };
 }

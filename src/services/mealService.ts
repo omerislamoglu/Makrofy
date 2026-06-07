@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
   getDoc,
   getDocs,
   updateDoc,
@@ -14,7 +15,6 @@ import {
   DocumentReference,
   QueryConstraint,
 } from 'firebase/firestore'
-import { getFunctions, httpsCallable } from 'firebase/functions'
 import { Capacitor } from '@capacitor/core'
 import { db, isDemoMode } from './firebase'
 import type {
@@ -36,6 +36,7 @@ import { createId } from '../utils/id'
 // so saving, the daily counter, and the meal list all work end-to-end.
 
 const DEMO_MEALS_KEY = (userId: string) => `makrofy_meals_${userId}`
+const DEBUG_MEALS = import.meta.env.DEV
 
 export type SerializedError = {
   name?: string
@@ -132,6 +133,33 @@ function safeNumber(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
 }
 
+/**
+ * Normalize a raw meal object from Cloud Function response.
+ * Ensures `totalMacros` is always a valid MacroNutrients object,
+ * falling back to flat fields (calories, protein, etc.) if needed.
+ */
+function normalizeCFMeal(raw: Record<string, unknown>): Meal {
+  const meal = raw as unknown as Meal
+  const tm = meal.totalMacros
+  // If totalMacros is missing or has invalid values, rebuild from flat fields
+  if (!tm || typeof tm.calories !== 'number') {
+    meal.totalMacros = {
+      calories: safeNumber(meal.calories),
+      protein: safeNumber(meal.protein),
+      carbs: safeNumber(meal.carbs),
+      fat: safeNumber(meal.fat),
+      fiber: safeNumber(meal.fiber),
+    }
+  }
+  // Ensure flat fields match totalMacros
+  meal.calories = meal.totalMacros.calories
+  meal.protein = meal.totalMacros.protein
+  meal.carbs = meal.totalMacros.carbs
+  meal.fat = meal.totalMacros.fat
+  meal.fiber = meal.totalMacros.fiber
+  return meal
+}
+
 function normalizeFoodItem(item: FoodItem): FoodItem {
   const grams = Math.max(1, Math.round(safeNumber(item.grams)))
   return {
@@ -151,6 +179,123 @@ function normalizeFoodItem(item: FoodItem): FoodItem {
     selectedQuantity: item.selectedQuantity ?? grams,
     gramEquivalent: item.gramEquivalent ?? grams,
   }
+}
+
+// ─── Unified native save ────────────────────────────────────────────────────
+// Single function for ALL meal saves on native iOS (AI scan, text, manual, restaurant).
+// Uses the saveAnalyzedMeal Cloud Function with Capacitor auth token.
+
+let _cachedFirebaseAuth: typeof import('@capacitor-firebase/authentication').FirebaseAuthentication | null = null
+let _cachedCapacitorToken: { token: string; expiresAt: number } | null = null
+
+async function getCapacitorToken(): Promise<string> {
+  if (_cachedCapacitorToken && _cachedCapacitorToken.expiresAt > Date.now()) {
+    return _cachedCapacitorToken.token
+  }
+  if (!_cachedFirebaseAuth) {
+    const mod = await import('@capacitor-firebase/authentication')
+    _cachedFirebaseAuth = mod.FirebaseAuthentication
+  }
+  const { token } = await _cachedFirebaseAuth.getIdToken({ forceRefresh: false })
+  if (!token) throw new Error('No auth token available on native')
+  _cachedCapacitorToken = {
+    token,
+    expiresAt: Date.now() + 50 * 60 * 1000,
+  }
+  return token
+}
+
+function getCFEndpoint(fnName: string): string {
+  const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID
+  const region = import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || 'us-central1'
+  return `https://${region}-${projectId}.cloudfunctions.net/${fnName}`
+}
+
+async function saveMealNative(localMeal: Meal, existingMealId?: string): Promise<Meal> {
+  const endpoint = getCFEndpoint('saveAnalyzedMeal')
+
+  // Sanitize items — only send fields the CF needs
+  const cleanItems = localMeal.items.map(item => ({
+    id: item.id || createId(),
+    name: item.name || 'Food',
+    grams: Math.max(1, Math.round(item.grams || 0)),
+    macros: {
+      calories: Math.round(safeNumber(item.macros?.calories)),
+      protein: Math.round(safeNumber(item.macros?.protein)),
+      carbs: Math.round(safeNumber(item.macros?.carbs)),
+      fat: Math.round(safeNumber(item.macros?.fat)),
+      fiber: Math.round(safeNumber(item.macros?.fiber)),
+    },
+    ...(item.confidence && { confidence: item.confidence }),
+  }))
+
+  const payload = {
+    data: {
+      ...(existingMealId && { mealId: existingMealId }),
+      meal: {
+        name: localMeal.name,
+        items: cleanItems,
+        totalMacros: localMeal.totalMacros,
+        mealType: localMeal.mealType,
+        source: localMeal.source || 'manual',
+        ...(localMeal.imageUrl && { imageUrl: localMeal.imageUrl }),
+        ...(localMeal.notes && { notes: localMeal.notes }),
+        ...(localMeal.confidence && { confidence: localMeal.confidence }),
+        dateKey: localMeal.dateKey,
+      },
+    },
+  }
+
+  if (DEBUG_MEALS) console.log('[MEAL_SAVE_NATIVE]', {
+    source: localMeal.source,
+    items: cleanItems.length,
+    kcal: localMeal.totalMacros?.calories,
+    dateKey: localMeal.dateKey,
+  })
+
+  // Try with cached token first, retry once with fresh token on 401
+  let token = await getCapacitorToken()
+  let response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  // If 401/403, clear cache and retry with a fresh token
+  if (response.status === 401 || response.status === 403) {
+    _cachedCapacitorToken = null
+    token = await getCapacitorToken()
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+  }
+
+  const rawText = await response.text()
+  if (!response.ok) {
+    console.error('[MEAL_SAVE_NATIVE] failed', { status: response.status, body: rawText.substring(0, 300) })
+    throw new Error(`Save failed: ${response.status} ${rawText.substring(0, 200)}`)
+  }
+
+  let result: { result?: { success?: boolean; mealId?: string } }
+  try {
+    result = JSON.parse(rawText)
+  } catch {
+    console.error('[MEAL_SAVE_NATIVE] JSON parse failed', { preview: rawText.substring(0, 300) })
+    throw new Error('Save response parse failed')
+  }
+
+  const mealId = result.result?.mealId ?? localMeal.id
+  if (DEBUG_MEALS) console.log('[MEAL_SAVE_NATIVE] success', { mealId, source: localMeal.source })
+  emitMealsUpdated()
+  return { ...localMeal, id: mealId }
 }
 
 type SaveAIScanMealPayload = Omit<Meal, 'id' | 'userId' | 'createdAt' | 'updatedAt'>
@@ -290,18 +435,27 @@ export async function createMeal(
   }
 
   if (isDemoMode) {
-    if (import.meta.env.DEV) {
-      console.debug('[mealService] saveMeal demo write', {
-        userId,
-        path: `localStorage:${DEMO_MEALS_KEY(userId)}`,
-        payload: localMeal,
-      })
-    }
     demoWriteMeals(userId, [localMeal, ...demoReadMeals(userId)])
     emitMealsUpdated()
     return localMeal
   }
 
+  if (DEBUG_MEALS) console.log('[MEAL_SAVE] createMeal start', {
+    userId,
+    itemCount: items.length,
+    totalCalories: totalMacros.calories,
+    mealType,
+    source,
+    dateKey,
+    native: Capacitor.isNativePlatform(),
+  })
+
+  // On native iOS, use Cloud Function (Firestore Web SDK auth not synced)
+  if (Capacitor.isNativePlatform()) {
+    return saveMealNative(localMeal)
+  }
+
+  // Web path: direct Firestore write
   const now = serverTimestamp()
 
   const mealData = {
@@ -325,14 +479,6 @@ export async function createMeal(
     ...(confidence && { confidence }),
   }
 
-  if (import.meta.env.DEV) {
-    console.debug('[mealService] saveMeal start', {
-      currentUserUid: userId,
-      writePath: `users/${userId}/meals/{newMealId}`,
-      payload: mealData,
-    })
-  }
-
   try {
     const ref = await addDoc(mealsCollection(userId), mealData)
     const remoteMeal = {
@@ -341,23 +487,18 @@ export async function createMeal(
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     }
-    if (import.meta.env.DEV) {
-      console.debug('[mealService] saveMeal success', {
-        documentId: ref.id,
-        writePath: `users/${userId}/meals/${ref.id}`,
-      })
-    }
+    if (DEBUG_MEALS) console.log('[MEAL_SAVE] createMeal success', { mealId: ref.id })
     emitMealsUpdated()
     return remoteMeal
   } catch (error) {
-    console.error('[mealService] saveMeal write error', {
-      currentUserUid: userId,
-      writePath: `users/${userId}/meals/{newMealId}`,
+    console.error('[MEAL_SAVE] createMeal write error', {
+      userId,
       error: serializeError(error),
     })
     throw error
   }
 }
+
 
 export async function saveAIScanMeal(
   userId: string,
@@ -373,110 +514,78 @@ export async function saveAIScanMeal(
     const nextMeals = existingMealId
       ? [localMeal, ...existingMeals.filter((meal) => meal.id !== existingMealId)]
       : [localMeal, ...existingMeals]
-    if (import.meta.env.DEV) {
-      console.debug('[mealService] saveAIScanMeal demo write', {
-        userId,
-        path: `localStorage:${DEMO_MEALS_KEY(userId)}`,
-        payload: localMeal,
-      })
-    }
     demoWriteMeals(userId, nextMeals)
     emitMealsUpdated()
     return localMeal
   }
 
-  const requestData = {
-    mealId: existingMealId,
-    meal: {
-      name: localMeal.name,
-      items: localMeal.items,
-      totalMacros: localMeal.totalMacros,
-      mealType: localMeal.mealType,
-      source: localMeal.source,
-      ...(localMeal.imageUrl && { imageUrl: localMeal.imageUrl }),
-      ...(localMeal.notes && { notes: localMeal.notes }),
-      ...(localMeal.confidence && { confidence: localMeal.confidence }),
-      dateKey: localMeal.dateKey,
-    },
+  if (DEBUG_MEALS) console.log('[AI_SAVE] saveAIScanMeal start', {
+    userId,
+    existingMealId: existingMealId ?? 'none',
+    itemCount: localMeal.items.length,
+    totalCalories: localMeal.totalMacros.calories,
+    mealType: localMeal.mealType,
+    dateKey: localMeal.dateKey,
+    native: Capacitor.isNativePlatform(),
+  })
+
+  // On native iOS, use Cloud Function via manual fetch (Firestore Web SDK auth not synced)
+  if (Capacitor.isNativePlatform()) {
+    return saveMealNative(localMeal, existingMealId)
+  }
+
+  // Web path: direct Firestore write
+  const now = serverTimestamp()
+
+  const mealData = {
+    userId,
+    name: localMeal.name,
+    items: localMeal.items,
+    totalMacros: localMeal.totalMacros,
+    calories: localMeal.totalMacros.calories,
+    protein: localMeal.totalMacros.protein,
+    carbs: localMeal.totalMacros.carbs,
+    fat: localMeal.totalMacros.fat,
+    fiber: localMeal.totalMacros.fiber,
+    quantity: localMeal.quantity,
+    mealType: localMeal.mealType,
+    source: 'ai_scan' as const,
+    dateKey: localMeal.dateKey,
+    updatedAt: now,
+    ...(localMeal.confidence && { confidence: localMeal.confidence }),
+    ...(localMeal.notes && { notes: localMeal.notes }),
   }
 
   try {
-    if (import.meta.env.DEV) {
-      console.debug('[mealService] saveAIScanMeal start', {
-        currentUserUid: userId,
-        writePath: existingMealId
-          ? `users/${userId}/meals/${existingMealId}`
-          : `users/${userId}/meals/{cloudFunctionMealId}`,
-        payload: requestData,
-      })
-    }
-    let result: { success: boolean; mealId: string }
-    if (Capacitor.isNativePlatform()) {
-      const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication')
-      const [{ user: nativeUser }, { token }] = await Promise.all([
-        FirebaseAuthentication.getCurrentUser(),
-        FirebaseAuthentication.getIdToken({ forceRefresh: false }),
-      ])
-      if (import.meta.env.DEV) {
-        console.debug('[AI_SAVE] native auth', {
-          nativeUid: nativeUser?.uid,
-          hasToken: Boolean(token),
-          tokenPrefix: token ? `${token.slice(0, 12)}...` : null,
-        })
-      }
-      if (!token) throw new Error('Native auth token is missing.')
+    let mealId: string
 
-      const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID
-      if (!projectId) throw new Error('Firebase proje ayarı bulunamadı.')
-      const region = import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || 'us-central1'
-      const endpoint = `https://${region}-${projectId}.cloudfunctions.net/saveAnalyzedMeal`
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ data: requestData }),
-      })
-      const payload = await response.json().catch(() => null) as
-        | { result?: { success: boolean; mealId: string }; error?: { message?: string; status?: string; details?: unknown } }
-        | null
-      if (!response.ok || payload?.error || !payload?.result?.mealId) {
-        const error = new Error(payload?.error?.message || `saveAnalyzedMeal failed (${response.status}).`) as Error & {
-          code?: string
-          status?: string
-          details?: unknown
-        }
-        error.code = payload?.error?.status || `http-${response.status}`
-        error.status = payload?.error?.status
-        error.details = payload?.error?.details
-        throw error
+    if (existingMealId) {
+      const ref = mealDoc(userId, existingMealId)
+      const snap = await getDoc(ref)
+      if (snap.exists()) {
+        await updateDoc(ref, { ...mealData })
+      } else {
+        await setDoc(ref, { ...mealData, createdAt: now })
       }
-      result = payload.result
+      mealId = existingMealId
     } else {
-      const saveMeal = httpsCallable<typeof requestData, { success: boolean; mealId: string }>(
-        getFunctions(),
-        'saveAnalyzedMeal'
-      )
-      const response = await saveMeal(requestData)
-      result = response.data
+      const ref = await addDoc(mealsCollection(userId), { ...mealData, createdAt: now })
+      mealId = ref.id
     }
 
-    const remoteMeal = { ...localMeal, id: result.mealId, updatedAt: Timestamp.now() }
-    if (import.meta.env.DEV) {
-      console.debug('[mealService] saveAIScanMeal success', {
-        documentId: result.mealId,
-        writePath: `users/${userId}/meals/${result.mealId}`,
-      })
-    }
+    if (DEBUG_MEALS) console.log('[AI_SAVE] saveAIScanMeal success', {
+      documentId: mealId,
+      writePath: `users/${userId}/meals/${mealId}`,
+    })
     emitMealsUpdated()
-    return remoteMeal
+    return { ...localMeal, id: mealId, updatedAt: Timestamp.now() }
   } catch (error) {
     const details = serializeError(error)
-    console.error('[mealService] AI scan save failed full error', details)
+    console.error('[AI_SAVE] save failed full error', details)
     throw error
   }
 }
+
 
 // ─── Read (single) ──────────────────────────────────────────────────────────
 
@@ -514,38 +623,93 @@ export async function getMealsByDate(
       .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
   }
 
+  if (DEBUG_MEALS) console.log('[HOME_MEALS] refresh start', { userId, dateKey, native: Capacitor.isNativePlatform() })
+
+  // On native iOS, Firestore Web SDK auth is not synced with Capacitor.
+  // Use Cloud Function callable via manual fetch with Capacitor ID token.
+  if (Capacitor.isNativePlatform()) {
+    return getMealsByDateNative(userId, dateKey)
+  }
+
+  // Web path: Firestore Web SDK
   const q = query(
     mealsCollection(userId),
-    where('dateKey', '==', dateKey),
-    orderBy('createdAt', 'desc')
+    where('dateKey', '==', dateKey)
   )
 
   try {
-    if (import.meta.env.DEV) {
-      console.debug('[mealService] HomePage fetch query', {
-        currentUserUid: userId,
-        path: `users/${userId}/meals`,
-        where: { dateKey },
-        orderBy: 'createdAt desc',
-      })
-    }
     const snap = await getDocs(q)
     const meals = snap.docs.map(docToMeal)
-    if (import.meta.env.DEV) {
-      console.debug('[mealService] HomePage fetched meal count', {
-        count: meals.length,
-        path: `users/${userId}/meals`,
-      })
-    }
+    meals.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    if (DEBUG_MEALS) console.log('[HOME_MEALS] fetched count', { count: meals.length, dateKey })
     return meals
   } catch (error) {
-    console.error('[mealService] Firestore day read failed', {
-      currentUserUid: userId,
-      path: `users/${userId}/meals`,
-      where: { dateKey },
+    console.error('[HOME_MEALS] error', {
+      userId,
+      dateKey,
       error: serializeError(error),
     })
     throw error
+  }
+}
+
+/**
+ * Native iOS: fetch meals via Cloud Function (getMealsForDate) using Capacitor auth token.
+ * Firestore Web SDK doesn't work on native because JS Firebase Auth isn't synced.
+ */
+async function getMealsByDateNative(_userId: string, dateKey: string): Promise<Meal[]> {
+  try {
+    let token = await getCapacitorToken()
+    const endpoint = getCFEndpoint('getMealsForDate')
+
+    if (DEBUG_MEALS) console.log('[HOME_MEALS] native fetch', { dateKey })
+
+    let response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ data: { dateKey } }),
+    })
+
+    // Retry once with fresh token on auth failure
+    if (response.status === 401 || response.status === 403) {
+      _cachedCapacitorToken = null
+      token = await getCapacitorToken()
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: { dateKey } }),
+      })
+    }
+
+    const rawText = await response.text()
+    if (!response.ok) {
+      console.error('[HOME_MEALS] native fetch failed', { status: response.status, body: rawText.substring(0, 300) })
+      return []
+    }
+
+    let payload: { result?: { meals?: Meal[] } }
+    try {
+      payload = JSON.parse(rawText)
+    } catch {
+      console.error('[HOME_MEALS] native JSON parse failed', { preview: rawText.substring(0, 300) })
+      return []
+    }
+
+    const rawMeals = (payload.result?.meals ?? []) as unknown as Record<string, unknown>[]
+    const meals = rawMeals.map(normalizeCFMeal)
+    if (DEBUG_MEALS) console.log('[HOME_MEALS] native fetched count', {
+      count: meals.length,
+      dateKey,
+      ids: meals.map(m => m.id),
+      firstMealCalories: meals[0]?.totalMacros?.calories,
+    })
+    return meals
+  } catch (error) {
+    console.error('[HOME_MEALS] native error', serializeError(error))
+    return []
   }
 }
 
@@ -572,6 +736,12 @@ export async function getMealHistory(
       )
   }
 
+  // On native iOS, use Cloud Function (Firestore Web SDK auth not synced)
+  if (Capacitor.isNativePlatform()) {
+    return getMealHistoryNative(startDate, endDate)
+  }
+
+  // Web path: Firestore Web SDK
   const constraints: QueryConstraint[] = [
     where('dateKey', '>=', startDate),
     where('dateKey', '<=', endDate),
@@ -581,35 +751,75 @@ export async function getMealHistory(
 
   const q = query(mealsCollection(userId), ...constraints)
   try {
-    if (import.meta.env.DEV) {
-      console.debug('[mealService] HistoryPage fetch query', {
-        currentUserUid: userId,
-        path: `users/${userId}/meals`,
-        where: { startDate, endDate },
-        orderBy: ['dateKey desc', 'createdAt desc'],
-      })
-    }
     const snap = await getDocs(q)
     const meals = snap.docs.map(docToMeal).sort((a, b) =>
       a.dateKey === b.dateKey
         ? String(b.createdAt).localeCompare(String(a.createdAt))
         : b.dateKey.localeCompare(a.dateKey)
     )
-    if (import.meta.env.DEV) {
-      console.debug('[mealService] HistoryPage fetched meal count', {
-        count: meals.length,
-        path: `users/${userId}/meals`,
-      })
-    }
+    if (DEBUG_MEALS) console.log('[HISTORY] fetched count', { count: meals.length, startDate, endDate })
     return meals
   } catch (error) {
-    console.error('[mealService] Firestore history read failed', {
+    console.error('[HISTORY] Firestore read failed', {
       currentUserUid: userId,
-      path: `users/${userId}/meals`,
       where: { startDate, endDate },
       error: serializeError(error),
     })
     throw error
+  }
+}
+
+/**
+ * Native iOS: fetch meal history via getMealsForRange Cloud Function.
+ */
+async function getMealHistoryNative(startDate: string, endDate: string): Promise<Meal[]> {
+  try {
+    let token = await getCapacitorToken()
+    const endpoint = getCFEndpoint('getMealsForRange')
+
+    if (DEBUG_MEALS) console.log('[HISTORY] native fetch', { startDate, endDate })
+
+    let response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ data: { startDateKey: startDate, endDateKey: endDate } }),
+    })
+
+    // Retry once with fresh token on auth failure
+    if (response.status === 401 || response.status === 403) {
+      _cachedCapacitorToken = null
+      token = await getCapacitorToken()
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: { startDateKey: startDate, endDateKey: endDate } }),
+      })
+    }
+
+    const rawText = await response.text()
+    if (!response.ok) {
+      console.error('[HISTORY] native fetch failed', { status: response.status, body: rawText.substring(0, 300) })
+      return []
+    }
+
+    let payload: { result?: { meals?: Meal[] } }
+    try {
+      payload = JSON.parse(rawText)
+    } catch {
+      console.error('[HISTORY] native JSON parse failed', { preview: rawText.substring(0, 300) })
+      return []
+    }
+
+    const rawMeals = (payload.result?.meals ?? []) as unknown as Record<string, unknown>[]
+    const meals = rawMeals.map(normalizeCFMeal)
+    if (DEBUG_MEALS) console.log('[HISTORY] native fetched count', { count: meals.length, startDate, endDate })
+    return meals
+  } catch (error) {
+    console.error('[HISTORY] native error', serializeError(error))
+    return []
   }
 }
 
@@ -668,8 +878,65 @@ export async function deleteMeal(
     return
   }
 
-  await deleteDoc(mealDoc(userId, mealId))
+  if (DEBUG_MEALS) console.log('[MEAL_DELETE] starting', { userId, mealId, native: Capacitor.isNativePlatform() })
+
+  if (Capacitor.isNativePlatform()) {
+    await deleteMealNative(mealId)
+  } else {
+    await deleteDoc(mealDoc(userId, mealId))
+  }
+
+  if (DEBUG_MEALS) console.log('[MEAL_DELETE] success', { mealId })
   emitMealsUpdated()
+}
+
+/**
+ * Native iOS: delete meal via deleteMeal Cloud Function using Capacitor auth token.
+ */
+async function deleteMealNative(mealId: string): Promise<void> {
+  let token = await getCapacitorToken()
+  const endpoint = getCFEndpoint('deleteMeal')
+
+  if (DEBUG_MEALS) console.log('[MEAL_DELETE] native call starting', { mealId })
+
+  let response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ data: { mealId } }),
+  })
+
+  // Retry once with fresh token on auth failure
+  if (response.status === 401 || response.status === 403) {
+    _cachedCapacitorToken = null
+    token = await getCapacitorToken()
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: { mealId } }),
+    })
+  }
+
+  const rawText = await response.text()
+  if (DEBUG_MEALS) console.log('[MEAL_DELETE] response', { status: response.status })
+
+  if (!response.ok) {
+    console.error('[MEAL_DELETE] error full', { status: response.status, body: rawText.substring(0, 300) })
+    throw new Error(`Delete failed: ${response.status} ${rawText.substring(0, 200)}`)
+  }
+
+  let result: { result?: { success?: boolean } }
+  try {
+    result = JSON.parse(rawText)
+  } catch {
+    throw new Error('Delete response parse failed')
+  }
+
+  if (!result.result?.success) {
+    throw new Error('Delete returned unsuccessful')
+  }
 }
 
 // ─── Convenience helpers (used by hooks) ────────────────────────────────────

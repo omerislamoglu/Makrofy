@@ -10,7 +10,9 @@ import { getServingBaseAmount } from './foodCalculation'
 export interface ParsedFoodToken {
   rawText: string
   quantity: number
+  quantityExplicit: boolean
   unit: string | null // raw unit text, e.g. 'gram', 'adet', 'porsiyon', 'dilim'...
+  unitExplicit: boolean
   unitGramMultiplier: number | null // for kg → 1000, for gram → 1
   foodQuery: string // normalized food name for catalog lookup
   confidence: number // 0-1
@@ -30,6 +32,10 @@ export interface ParseResult {
   totalMacros: MacroNutrients
   suggestedMealType: MealType | null
   unparsedText: string
+  /** True when all segments failed to match and input looks like nonsense/greeting */
+  hasNonsenseInput?: boolean
+  /** User-facing message when nonsense is detected */
+  nonsenseMessage?: string
 }
 
 // ─── Number words (Turkish + English) ───────────────────────────────────────
@@ -64,6 +70,134 @@ const ENGLISH_NUMBERS: Record<string, number> = {
   eight: 8,
   nine: 9,
   ten: 10,
+}
+
+const NUMBER_WORDS = [...Object.keys(TURKISH_NUMBERS), ...Object.keys(ENGLISH_NUMBERS)]
+
+const TOKEN_CORRECTIONS: Record<string, string> = {
+  // Turkish foods
+  yuurta: 'yumurta',
+  yumrta: 'yumurta',
+  yumurtda: 'yumurta',
+  yumurt: 'yumurta',
+  ekmke: 'ekmek',
+  emek: 'ekmek',
+  tavk: 'tavuk',
+  tauk: 'tavuk',
+  pilw: 'pilav',
+  pilaw: 'pilav',
+  pirnc: 'pirinc',
+  pirinc: 'pirinc',
+  makrna: 'makarna',
+  yogrt: 'yogurt',
+  yogurt: 'yogurt',
+  yogurtlu: 'yogurtlu',
+  peynr: 'peynir',
+  peynri: 'peynir',
+  kofe: 'kofte',
+  kofte: 'kofte',
+  corbasi: 'corba',
+  corba: 'corba',
+  lahmcun: 'lahmacun',
+  lahmacn: 'lahmacun',
+  donr: 'doner',
+  durum: 'durum',
+  manti: 'manti',
+  borek: 'borek',
+  cips: 'cips',
+  cikolata: 'cikolata',
+  biskvi: 'biskuvi',
+  sniker: 'snickers',
+  snikers: 'snickers',
+  snikrs: 'snickers',
+  snickerss: 'snickers',
+  kitkat: 'kitkat',
+  kitkattt: 'kitkat',
+  oreo: 'oreo',
+  dorito: 'doritos',
+  doritos: 'doritos',
+  layss: 'lays',
+  cheetos: 'cheetos',
+  citos: 'cheetos',
+  pringls: 'pringles',
+  // English foods
+  chiken: 'chicken',
+  chickn: 'chicken',
+  chikn: 'chicken',
+  brest: 'breast',
+  rise: 'rice',
+  bred: 'bread',
+  breda: 'bread',
+  tost: 'toast',
+  omlt: 'omelet',
+  omlette: 'omelet',
+  yogurtt: 'yogurt',
+  bananna: 'banana',
+  bannana: 'banana',
+  appel: 'apple',
+  sandwitch: 'sandwich',
+  burgerr: 'burger',
+  hambuger: 'hamburger',
+  protien: 'protein',
+  califonia: 'california',
+  californiaa: 'california',
+  calfornia: 'california',
+  clifornia: 'california',
+  sushy: 'sushi',
+  sushii: 'sushi',
+  // Units
+  grm: 'gram',
+  garam: 'gram',
+  giram: 'gram',
+  adt: 'adet',
+  tanee: 'tane',
+  porsyn: 'porsiyon',
+  porsiyonluk: 'porsiyon',
+  dlim: 'dilim',
+  dilmm: 'dilim',
+  kasik: 'kasik',
+  bardk: 'bardak',
+  bardagi: 'bardagi',
+  bardaği: 'bardagi',
+  pakett: 'paket',
+  kutuu: 'kutu',
+  sise: 'sise',
+  sisee: 'sise',
+}
+
+const CONTEXT_WORDS = new Set([
+  'yedim', 'yemek', 'yiyorum', 'yendi', 'tukettim', 'tukettik', 'tuketildi',
+  'aldim', 'alindi', 'içtim', 'ictim', 'ictik', 'yicek', 'yiyecek',
+  'kahvaltida', 'oglede', 'oglende', 'aksam', 'aksama', 'ara', 'ogun',
+  'for', 'ate', 'eaten', 'had', 'have', 'having', 'consumed', 'drank',
+  'breakfast', 'lunch', 'dinner', 'snack', 'meal',
+])
+
+const GARBAGE_INPUTS = new Set([
+  'merhaba', 'selam', 'slm', 'hello', 'hi', 'hey', 'test', 'deneme',
+  'naber', 'nasilsin', 'ok', 'okay', 'tamam',
+])
+
+function correctKnownTokens(text: string): string {
+  return text
+    .split(/\s+/)
+    .map((token) => TOKEN_CORRECTIONS[token] ?? token)
+    .join(' ')
+}
+
+function isLikelyGarbageSegment(text: string): boolean {
+  const normalized = normalizeFoodText(text)
+  if (!normalized) return true
+  if (GARBAGE_INPUTS.has(normalized)) return true
+  const words = normalized.split(/\s+/).filter((word) => !CONTEXT_WORDS.has(word))
+  return words.length === 0
+}
+
+function stripContextWords(text: string): string {
+  return text
+    .split(/\s+/)
+    .filter((word) => !CONTEXT_WORDS.has(word))
+    .join(' ')
 }
 
 // ─── Unit synonyms ──────────────────────────────────────────────────────────
@@ -197,23 +331,66 @@ const MEAL_TYPE_KEYWORDS: Record<string, MealType> = {
 // ─── Turkish suffix stripping for better matching ───────────────────────────
 
 const TURKISH_SUFFIXES = [
+  // Longer suffixes first for greedy matching
+  'lari', 'leri', 'larin', 'lerin',
+  'lardan', 'lerden',
+  'yla', 'yle',
   'dan', 'den', 'tan', 'ten',
-  'la', 'le', 'yla', 'yle',
-  'si', 'su', 'i', 'u',
   'nda', 'nde',
-  'nin', 'nun', 'nun', 'nin',
-  'lik', 'luk', 'lik', 'luk',
+  'nin', 'nun',
+  'lik', 'luk',
+  'lar', 'ler',
+  'ini', 'unu', 'inu',
+  'la', 'le',
+  'da', 'de', 'ta', 'te',
+  'ya', 'ye', 'na', 'ne',
+  'si', 'su',
+  'in', 'un',
+  'i', 'u',
 ]
 
 function stemTurkish(word: string): string {
   let result = word
-  for (const suffix of TURKISH_SUFFIXES) {
-    if (result.length > suffix.length + 2 && result.endsWith(suffix)) {
-      result = result.slice(0, -suffix.length)
-      break
+  // Try up to 2 passes of suffix stripping
+  for (let pass = 0; pass < 2; pass++) {
+    let stripped = false
+    for (const suffix of TURKISH_SUFFIXES) {
+      if (result.length > suffix.length + 2 && result.endsWith(suffix)) {
+        result = result.slice(0, -suffix.length)
+        stripped = true
+        break
+      }
     }
+    if (!stripped) break
   }
   return result
+}
+
+// ─── Nonsense / greeting detection ─────────────────────────────────────────
+
+const NONSENSE_WORDS = new Set([
+  'merhaba', 'selam', 'nasilsin', 'nasilsiniz', 'iyi', 'gunaydin', 'iyi gunler',
+  'hosgeldin', 'hosgeldiniz', 'gunaydın', 'tesekkur', 'tesekkurler', 'sagol',
+  'tamam', 'evet', 'hayir', 'belki', 'naber', 'nbr', 'slm', 'mrb',
+  'hello', 'hi', 'hey', 'good morning', 'good night', 'thanks', 'thank you',
+  'yes', 'no', 'ok', 'okay', 'bye', 'goodbye', 'sup', 'yo', 'lol', 'haha',
+  'test', 'asdf', 'qwerty', 'aaa', 'bbb', 'xxx', 'zzz', 'abc', 'deneme',
+  'helo', 'hola', 'bonjour', 'ciao',
+])
+
+function isNonsenseInput(text: string): boolean {
+  const normalized = normalizeFoodText(text).trim()
+  if (!normalized) return true
+  // Direct nonsense match
+  if (NONSENSE_WORDS.has(normalized)) return true
+  // All words are nonsense
+  const words = normalized.split(' ').filter(w => w.length > 0)
+  if (words.length <= 3 && words.every(w => NONSENSE_WORDS.has(w) || w.length <= 1)) return true
+  // Only consonants or only vowels (gibberish)
+  if (normalized.length >= 3 && /^[bcdfghjklmnpqrstvwxyz]+$/.test(normalized)) return true
+  // Repeated single char
+  if (/^(.)\1+$/.test(normalized)) return true
+  return false
 }
 
 // ─── Splitter ───────────────────────────────────────────────────────────────
@@ -234,8 +411,14 @@ function splitIntoSegments(text: string): string[] {
     .replace(/\balso\b/gi, ',')
     .replace(/\+/g, ',')
 
+  const quantityBoundary = new RegExp(
+    String.raw`\s+(?=(?:\d+(?:[.,]\d+)?|${NUMBER_WORDS.join('|')})\s+)`,
+    'gi'
+  )
+
   return normalized
     .split(',')
+    .flatMap((part) => part.trim().replace(quantityBoundary, ',').split(','))
     .map(s => s.trim())
     .filter(s => s.length > 0)
 }
@@ -295,7 +478,7 @@ function parseNumber(text: string): { value: number; rest: string } | null {
 }
 
 function parseUnit(text: string): { unit: string; unitInfo: UnitInfo; rest: string } | null {
-  const normalized = normalizeFoodText(text)
+  const normalized = correctKnownTokens(normalizeFoodText(text))
   const trimmed = normalized.trim()
 
   // Try multi-word units first (longest match first)
@@ -315,11 +498,29 @@ function parseUnit(text: string): { unit: string; unitInfo: UnitInfo; rest: stri
     return { unit: firstWord, unitInfo: UNIT_MAP[firstWord], rest: trimmed.slice(firstWord.length).trim() }
   }
 
+  if (firstWord) {
+    const fuzzyUnit = Object.keys(UNIT_MAP).find((unit) => {
+      if (unit.includes(' ')) return false
+      if (Math.abs(unit.length - firstWord.length) > 2) return false
+      let mismatches = 0
+      const maxLen = Math.max(unit.length, firstWord.length)
+      for (let i = 0; i < maxLen; i += 1) {
+        if (unit[i] !== firstWord[i]) mismatches += 1
+        if (mismatches > 1) return false
+      }
+      return true
+    })
+    if (fuzzyUnit) {
+      return { unit: fuzzyUnit, unitInfo: UNIT_MAP[fuzzyUnit], rest: trimmed.slice(firstWord.length).trim() }
+    }
+  }
+
   return null
 }
 
 function parseSegment(segment: string): ParsedFoodToken {
-  const normalized = normalizeFoodText(segment)
+  const normalized = stripContextWords(correctKnownTokens(normalizeFoodText(segment)))
+  const hasExplicitSize = /\b(kucuk|orta|buyuk|small|medium|large)\b/.test(normalized)
 
   // Step 1: Extract number
   const numResult = parseNumber(normalized)
@@ -349,14 +550,20 @@ function parseSegment(segment: string): ParsedFoodToken {
 
   // Step 3: Clean up food query
   // Remove cooking method adjectives (keep them for context but clean for matching)
-  const foodQuery = remaining
+  let foodQuery = remaining
     // Turkish cooking methods
     .replace(/\b(haslanmis|haslama|izgara|kizartma|tava|firin|firinda|közlenmis|buharda|kavurma|sote|pismis|cig)\b/g, ' ')
     // English cooking methods & articles
     .replace(/\b(boiled|grilled|fried|baked|roasted|steamed|sauteed|raw|smoked|poached|scrambled|mashed|stuffed)\b/g, ' ')
     .replace(/\b(of|the)\b/g, ' ')
+    .replace(/\b(with|and|ve|ile)\b/g, ' ')
+    .replace(/\b(kucuk|orta|buyuk|small|medium|large|boy)\b/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+
+  if (/(\b(kucuk|orta|buyuk|small|medium|large)\b).*\bpatates\b/.test(normalized) && foodQuery === 'patates') {
+    foodQuery = 'patates kizartmasi'
+  }
 
   // Keep cooking method in rawText for display
   const confidence = numResult ? 0.7 : 0.5 // Higher confidence if we found a number
@@ -364,7 +571,9 @@ function parseSegment(segment: string): ParsedFoodToken {
   return {
     rawText: segment.trim(),
     quantity,
+    quantityExplicit: Boolean(numResult),
     unit,
+    unitExplicit: Boolean(unitResult) || hasExplicitSize,
     unitGramMultiplier,
     foodQuery: foodQuery || remaining,
     confidence,
@@ -427,6 +636,19 @@ function resolveToken(token: ParsedFoodToken, catalog: FoodCatalogItem[]): Resol
 
 function findBestServing(food: FoodCatalogItem, token: ParsedFoodToken): FoodServingOption {
   const { unit, quantity } = token
+  const raw = normalizeFoodText(token.rawText)
+  const preferServingByLabel = (patterns: string[]): FoodServingOption | undefined =>
+    food.servingOptions.find((serving) => {
+      const label = normalizeFoodText(serving.label)
+      return patterns.some((pattern) => label.includes(pattern))
+    })
+
+  const sizedServing =
+    (/\b(kucuk|small)\b/.test(raw) && preferServingByLabel(['kucuk', 'small'])) ||
+    (/\b(orta|medium)\b/.test(raw) && preferServingByLabel(['orta', 'medium'])) ||
+    (/\b(buyuk|large)\b/.test(raw) && preferServingByLabel(['buyuk', 'large']))
+
+  if (sizedServing) return sizedServing
 
   // If user specified gram/ml, use a direct gram/ml serving
   if (unit === 'gram') {
@@ -440,15 +662,24 @@ function findBestServing(food: FoodCatalogItem, token: ParsedFoodToken): FoodSer
   if (unit) {
     const matchingServing = food.servingOptions.find(s => s.unitType === unit)
     if (matchingServing) return matchingServing
+
+    if (unit === 'paket') {
+      const packagedServing = food.servingOptions.find(s => ['bar', 'adet', 'kutu', 'sise', 'porsiyon'].includes(s.unitType))
+      if (packagedServing) return packagedServing
+    }
+
+    if (unit === 'adet') {
+      const countableServing = food.servingOptions.find(s => ['bar', 'paket', 'kutu', 'sise', 'dilim', 'porsiyon'].includes(s.unitType))
+      if (countableServing) return countableServing
+    }
   }
 
-  // No unit specified → check if food has a piece/adet serving (for countable items)
+  // No unit specified → prefer natural countable/package servings before 100 g/ml.
   if (!unit) {
-    const adetServing = food.servingOptions.find(s => s.unitType === 'adet')
-    if (adetServing) return adetServing
-
-    const porsiyonServing = food.servingOptions.find(s => s.unitType === 'porsiyon')
-    if (porsiyonServing) return porsiyonServing
+    for (const preferred of ['adet', 'bar', 'paket', 'kutu', 'sise', 'dilim', 'porsiyon'] as const) {
+      const serving = food.servingOptions.find(s => s.unitType === preferred)
+      if (serving) return serving
+    }
   }
 
   // Fallback to default serving
@@ -523,6 +754,10 @@ export function parseNaturalLanguageInput(
     const normalized = normalizeFoodText(segment)
     if (normalized.length < 2) continue
     if (MEAL_TYPE_KEYWORDS[normalized]) continue
+    if (isLikelyGarbageSegment(segment)) {
+      unparsedParts.push(segment)
+      continue
+    }
 
     const token = parseSegment(segment)
 
@@ -537,6 +772,38 @@ export function parseNaturalLanguageInput(
   }
 
   const totalMacros = sumMacros(items.map(i => i.macros))
+
+  // Check for nonsense input: all segments failed to match
+  const allFailed = items.length > 0 && items.every(i => i.match === null)
+  const noItems = items.length === 0 && unparsedParts.length > 0
+  const inputText = normalizeFoodText(text)
+  const looksLikeNonsense = isNonsenseInput(text)
+
+  if ((allFailed || noItems) && looksLikeNonsense) {
+    return {
+      items,
+      totalMacros,
+      suggestedMealType,
+      unparsedText: unparsedParts.join(', '),
+      hasNonsenseInput: true,
+      nonsenseMessage: inputText.match(/^[a-z]/)
+        ? 'Bu bir yemek gibi görünmüyor. Lütfen yemek adı girin (örn. "2 yumurta, 1 dilim ekmek").'
+        : "This doesn't look like food. Please enter a food name (e.g. \"2 eggs, 1 slice bread\").",
+    }
+  }
+
+  // If all items failed to match but it's not obviously nonsense,
+  // still hint that nothing was found
+  if (allFailed && items.length > 0) {
+    return {
+      items,
+      totalMacros,
+      suggestedMealType,
+      unparsedText: unparsedParts.join(', '),
+      hasNonsenseInput: false,
+      nonsenseMessage: 'Eşleşen yemek bulunamadı. Farklı bir isim deneyin.',
+    }
+  }
 
   return {
     items,
@@ -601,7 +868,43 @@ export function resolveWithQuantity(
 
   return {
     ...item,
+    token: { ...newToken, quantityExplicit: true },
+    totalGrams,
+    macros,
+  }
+}
+
+// ─── Update a resolved item with explicit serving + quantity ────────────────
+
+export function resolveWithServingAndQuantity(
+  item: ResolvedFoodItem,
+  serving: FoodServingOption,
+  newQuantity: number
+): ResolvedFoodItem {
+  if (!item.match) return item
+
+  const newToken = {
+    ...item.token,
+    quantity: newQuantity,
+    quantityExplicit: true,
+    unit: serving.unitType,
+    unitExplicit: true,
+  }
+  const totalGrams = calculateTotalGrams(newToken, serving, item.match)
+
+  const per100g: NutritionPer100g = {
+    calories: item.match.calories,
+    protein: item.match.protein,
+    carbs: item.match.carbs,
+    fat: item.match.fat,
+    fiber: item.match.fiber,
+  }
+  const macros = calculateMacrosForWeight(per100g, totalGrams)
+
+  return {
+    ...item,
     token: newToken,
+    serving,
     totalGrams,
     macros,
   }

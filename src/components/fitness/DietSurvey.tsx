@@ -37,6 +37,8 @@ function getQuestions(locale: string): Question[] {
           { label: 'Balanced', value: 'balanced', desc: 'P30 / C40 / F30' },
           { label: 'High Protein', value: 'highProtein', desc: 'P40 / C30 / F30' },
           { label: 'Low Carb', value: 'lowCarb', desc: 'P35 / C20 / F45' },
+          { label: 'Ketogenic', value: 'keto', desc: 'P30 / C5 / F65 — very low carb' },
+          { label: 'Mediterranean', value: 'mediterranean', desc: 'P25 / C45 / F30 — olive oil & fish' },
         ],
       },
       {
@@ -46,6 +48,7 @@ function getQuestions(locale: string): Question[] {
           { label: '3 meals', value: 3, desc: 'Classic structure' },
           { label: '4 meals', value: 4, desc: '+1 snack' },
           { label: '5 meals', value: 5, desc: 'Frequent small meals' },
+          { label: '6 meals', value: 6, desc: 'Bodybuilder / high metabolism' },
         ],
       },
       {
@@ -54,9 +57,29 @@ function getQuestions(locale: string): Question[] {
         subtitle: "I'll select foods accordingly.",
         options: [
           { label: 'None', value: 'none' },
-          { label: 'Vegetarian', value: 'vegetarian' },
+          { label: 'Vegetarian', value: 'vegetarian', desc: 'No meat or fish' },
+          { label: 'Vegan', value: 'vegan', desc: 'No animal products at all' },
           { label: 'Lactose-free', value: 'lactoseFree' },
           { label: 'Gluten-free', value: 'glutenFree' },
+        ],
+      },
+      {
+        key: 'budget',
+        title: 'What is your food budget?',
+        subtitle: 'This affects ingredient selection — premium vs. budget-friendly.',
+        options: [
+          { label: 'Economic', value: 'economic', desc: 'Legumes, eggs, chicken, seasonal veg' },
+          { label: 'Moderate', value: 'moderate', desc: 'Standard grocery shopping' },
+          { label: 'Flexible', value: 'flexible', desc: 'Salmon, beef, superfoods included' },
+        ],
+      },
+      {
+        key: 'cooking',
+        title: 'How much cooking are you willing to do?',
+        options: [
+          { label: 'Minimal', value: 'minimal', desc: 'Quick prep, no recipes' },
+          { label: 'Moderate', value: 'moderate', desc: 'Some cooking required' },
+          { label: 'Advanced', value: 'advanced', desc: 'Full recipe-based meals' },
         ],
       },
     ]
@@ -79,6 +102,8 @@ function getQuestions(locale: string): Question[] {
         { label: 'Dengeli', value: 'balanced', desc: 'P30 / K40 / Y30' },
         { label: 'Yüksek Protein', value: 'highProtein', desc: 'P40 / K30 / Y30' },
         { label: 'Düşük Karbonhidrat', value: 'lowCarb', desc: 'P35 / K20 / Y45' },
+        { label: 'Ketojenik', value: 'keto', desc: 'P30 / K5 / Y65 — çok düşük karbonhidrat' },
+        { label: 'Akdeniz', value: 'mediterranean', desc: 'P25 / K45 / Y30 — zeytinyağı & balık' },
       ],
     },
     {
@@ -88,6 +113,7 @@ function getQuestions(locale: string): Question[] {
         { label: '3 öğün', value: 3, desc: 'Klasik düzen' },
         { label: '4 öğün', value: 4, desc: '+1 ara öğün' },
         { label: '5 öğün', value: 5, desc: 'Sık ve küçük öğünler' },
+        { label: '6 öğün', value: 6, desc: 'Vücut geliştirme / yüksek metabolizma' },
       ],
     },
     {
@@ -96,9 +122,29 @@ function getQuestions(locale: string): Question[] {
       subtitle: 'Besinleri buna göre seçerim.',
       options: [
         { label: 'Yok', value: 'none' },
-        { label: 'Vejetaryen', value: 'vegetarian' },
+        { label: 'Vejetaryen', value: 'vegetarian', desc: 'Et ve balık yok' },
+        { label: 'Vegan', value: 'vegan', desc: 'Hiçbir hayvansal ürün yok' },
         { label: 'Laktozsuz', value: 'lactoseFree' },
         { label: 'Glutensiz', value: 'glutenFree' },
+      ],
+    },
+    {
+      key: 'budget',
+      title: 'Besin bütçen nasıl?',
+      subtitle: 'Bu, içerik seçimini etkiler — premium mi ekonomik mi.',
+      options: [
+        { label: 'Ekonomik', value: 'economic', desc: 'Baklagil, yumurta, tavuk, mevsim sebzesi' },
+        { label: 'Orta', value: 'moderate', desc: 'Standart market alışverişi' },
+        { label: 'Esnek', value: 'flexible', desc: 'Somon, dana, süper besinler dahil' },
+      ],
+    },
+    {
+      key: 'cooking',
+      title: 'Ne kadar yemek yapmaya isteklisin?',
+      options: [
+        { label: 'Minimum', value: 'minimal', desc: 'Hızlı hazırlık, tarif yok' },
+        { label: 'Orta', value: 'moderate', desc: 'Biraz pişirme gerekir' },
+        { label: 'İleri', value: 'advanced', desc: 'Tarif bazlı zengin yemekler' },
       ],
     },
   ]
@@ -142,7 +188,7 @@ export default function DietSurvey({
     <div className="bg-zinc-900 rounded-2xl border border-zinc-800/50 overflow-hidden">
       <div className="px-4 pt-4 pb-3 flex items-center gap-2.5 border-b border-zinc-800/40">
         {step >= 0 ? (
-          <button onClick={back} className="w-8 h-8 rounded-xl bg-zinc-800 flex items-center justify-center flex-shrink-0">
+          <button type="button" onClick={back} className="w-8 h-8 rounded-xl bg-zinc-800 flex items-center justify-center flex-shrink-0">
             <ChevronLeft size={16} className="text-zinc-300" />
           </button>
         ) : (
@@ -162,7 +208,7 @@ export default function DietSurvey({
                   : `Adım ${step + 1} / ${QUESTIONS.length}`)}
           </p>
         </div>
-        <button onClick={onCancel} className="text-[11px] text-zinc-500 px-2 py-1">
+        <button type="button" onClick={onCancel} className="text-[11px] text-zinc-500 px-2 py-1">
           {isEN ? 'Close' : 'Kapat'}
         </button>
       </div>
@@ -193,11 +239,11 @@ export default function DietSurvey({
             >
               <p className="text-[13px] text-zinc-400 leading-relaxed mb-1">
                 {isEN
-                  ? <>I can ask a few questions like a dietitian and prepare a <span className="text-zinc-200 font-medium">personalised</span> meal plan based on your goal and calorie balance. If you're in a hurry, you can pick from ready-made plans.</>
+                  ? <>Answer a few questions and I’ll prepare a <span className="text-zinc-200 font-medium">personalized</span> meal plan based on your goal and calorie balance. If you're in a hurry, you can pick from ready-made plans.</>
                   : <>Bir diyetisyen gibi birkaç soru sorup hedefine ve kalori dengene uygun <span className="text-zinc-200 font-medium">kişiye özel</span> bir beslenme planı hazırlayabilirim. Acelen varsa hazır planlardan da seçebilirsin.</>
                 }
               </p>
-              <button
+              <button type="button"
                 onClick={() => { haptics.impactLight(); setStep(0) }}
                 className="w-full bg-white text-black rounded-2xl p-4 flex items-center gap-3 active:scale-[0.99] transition-transform"
               >
@@ -209,12 +255,12 @@ export default function DietSurvey({
                     {isEN ? 'Build mine' : 'Bana özel hazırla'}
                   </p>
                   <p className="text-[11px] text-zinc-600">
-                    {isEN ? '4-question survey · personalised plan' : '4 soruluk anket · kişiye özel plan'}
+                    {isEN ? `${QUESTIONS.length}-question survey · personalized plan` : `${QUESTIONS.length} soruluk anket · kişiye özel plan`}
                   </p>
                 </div>
                 <ArrowRight size={16} className="text-zinc-500" />
               </button>
-              <button
+              <button type="button"
                 onClick={() => { haptics.impactLight(); onPickReady() }}
                 className="w-full bg-zinc-800 border border-zinc-700/50 rounded-2xl p-4 flex items-center gap-3 active:scale-[0.99] transition-transform"
               >
@@ -248,7 +294,7 @@ export default function DietSurvey({
                 {QUESTIONS[step].options.map((opt) => {
                   const selected = answers[QUESTIONS[step].key] === opt.value
                   return (
-                    <button
+                    <button type="button"
                       key={String(opt.value)}
                       onClick={() => select(QUESTIONS[step], opt.value)}
                       className={`w-full rounded-xl p-3.5 flex items-center gap-3 border text-left transition-all active:scale-[0.99]

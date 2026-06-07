@@ -4,10 +4,16 @@ import type { FoodItem } from '../types/meal'
 import type { MealType } from '../types/meal'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
-import { auth, isDemoMode, storage } from './firebase'
+import { app, auth, isDemoMode, storage } from './firebase'
 import { Capacitor } from '@capacitor/core'
 import { getToday } from '../utils/date'
 import { createId } from '../utils/id'
+
+// ─── Constants ────────────────────────────────────────────────────────────
+
+const FUNCTIONS_REGION = import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || 'us-central1'
+const NATIVE_TIMEOUT_MS = 120_000
+const DEBUG_SCAN = import.meta.env.DEV
 
 // ─── File Validation ───────────────────────────────────────────────────────
 
@@ -30,8 +36,6 @@ export class ScanServiceError extends Error {
 }
 
 function validateImageFile(file: File): void {
-  // Check MIME type (also accept HEIC by extension since some browsers
-  // report an empty type for .heic files)
   const isHeic = file.name.toLowerCase().endsWith('.heic') ||
     file.name.toLowerCase().endsWith('.heif')
 
@@ -60,7 +64,6 @@ function validateImageFile(file: File): void {
 
 type AnalyzeMealFunctionResponse = {
   success: boolean
-  mealId: string
   analysis: {
     mealName?: string
     items: AIScanResult['items']
@@ -85,17 +88,13 @@ type AnalyzeMealFunctionResponse = {
 /**
  * Analyze a meal image and return detected food items with macros.
  *
- * Uploads the image to Firebase Storage, then calls the Cloud Function that
- * runs the real vision model. Server-side code may still protect against
- * provider abuse, but there is no free/pro scan entitlement gate.
- *
- * @throws {ScanServiceError} on validation or analysis failure
+ * Web: uploads to Firebase Storage, calls httpsCallable with download URL.
+ * Native iOS: sends compressed base64 directly to Cloud Function (no Storage).
  */
 export async function analyzeMealImage(
   file: File,
   options: { mealTypeHint?: MealType; gramNotes?: string } = {}
 ): Promise<AIScanResult> {
-  // ── Step 1: validate ────────────────────────────────────────────────────
   validateImageFile(file)
 
   try {
@@ -110,6 +109,7 @@ export async function analyzeMealImage(
       return analyzeNativeWithIdToken(file, options)
     }
 
+    // ── Web path: Storage upload + httpsCallable ──
     const user = auth.currentUser
     if (!user) {
       throw new ScanServiceError('analysis_failed', 'Please sign in to use AI analysis.')
@@ -128,7 +128,7 @@ export async function analyzeMealImage(
     const analyze = httpsCallable<
       { imageUrl: string; mealTypeHint?: MealType; gramNotes?: string; dateKey?: string },
       AnalyzeMealFunctionResponse
-    >(getFunctions(), 'analyzeMealImage')
+    >(getFunctions(app, FUNCTIONS_REGION), 'analyzeMealImage')
 
     const response = await analyze({
       imageUrl,
@@ -139,66 +139,45 @@ export async function analyzeMealImage(
 
     return mapFunctionAnalysis(response.data)
   } catch (err) {
-    // ScanServiceError — rethrow as-is
     if (err instanceof ScanServiceError) throw err
 
-    // Firebase callable function errors have a `code` string like "functions/not-found"
     if (err && typeof err === 'object' && 'code' in err) {
       const fbErr = err as { code: string; message?: string }
 
       switch (fbErr.code) {
-        case 'functions/resource-exhausted': {
-          throw new ScanServiceError(
-            'rate_limited',
-            'AI service is temporarily busy. Please wait and try again.'
-          )
-        }
+        case 'functions/resource-exhausted':
+          throw new ScanServiceError('rate_limited', fbErr.message || 'Daily AI scan limit reached.')
         case 'functions/not-found':
-          throw new ScanServiceError(
-            'no_food_detected',
-            fbErr.message || 'No food detected in the photo. Please take a clear photo of your meal.'
-          )
+          throw new ScanServiceError('no_food_detected', fbErr.message || 'No food detected in the photo.')
         case 'functions/deadline-exceeded':
-          throw new ScanServiceError(
-            'timeout',
-            'Analysis timed out. Please try again.'
-          )
+          throw new ScanServiceError('timeout', 'Analysis timed out. Please try again.')
         case 'functions/unauthenticated':
-          throw new ScanServiceError(
-            'analysis_failed',
-            'Please sign in to use AI analysis.'
-          )
+          throw new ScanServiceError('analysis_failed', 'Please sign in to use AI analysis.')
         case 'functions/failed-precondition':
-          throw new ScanServiceError(
-            'analysis_failed',
-            'AI service configuration error. Please try again later.'
-          )
+          throw new ScanServiceError('analysis_failed', fbErr.message || 'AI analysis is available for Pro users only.')
         case 'functions/invalid-argument':
-          throw new ScanServiceError(
-            'upload_failed',
-            fbErr.message || 'Invalid request. Please try again.'
-          )
+          throw new ScanServiceError('upload_failed', fbErr.message || 'Invalid request. Please try again.')
         default:
-          throw new ScanServiceError(
-            'analysis_failed',
-            fbErr.message || 'Analysis failed. Please try again.'
-          )
+          throw new ScanServiceError('analysis_failed', fbErr.message || 'Analysis failed. Please try again.')
       }
     }
 
     throw new ScanServiceError(
       'analysis_failed',
-      err instanceof Error && err.message
-        ? err.message
-        : 'Analysis failed. Please try again.'
+      err instanceof Error && err.message ? err.message : 'Analysis failed. Please try again.'
     )
   }
 }
+
+// ─── Native iOS path: base64 direct to Cloud Function ─────────────────────
 
 async function analyzeNativeWithIdToken(
   file: File,
   options: { mealTypeHint?: MealType; gramNotes?: string }
 ): Promise<AIScanResult> {
+  if (DEBUG_SCAN) console.log('[AI_SCAN] native path started', { fileName: file.name, fileSize: file.size, fileType: file.type })
+
+  // ── 1. Get Capacitor Firebase auth token ──
   const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication')
   const [{ user }, { token }] = await Promise.all([
     FirebaseAuthentication.getCurrentUser(),
@@ -208,64 +187,128 @@ async function analyzeNativeWithIdToken(
   if (!user || !token) {
     throw new ScanServiceError('analysis_failed', 'Please sign in to use AI analysis.')
   }
+  if (DEBUG_SCAN) console.log('[AI_SCAN] token received', { uid: user.uid, tokenLength: token.length })
 
-  const imageUrl = await imageFileToDataUrl(file)
+  // ── 2. Convert file to base64 data URL ──
+  const dataUrl = await fileToDataUrl(file)
+  if (DEBUG_SCAN) console.log('[AI_SCAN] dataUrl length', { length: dataUrl.length, sizeKB: Math.round(dataUrl.length / 1024) })
+
+  // ── 3. Call Cloud Function with base64 payload ──
   const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID
   if (!projectId) {
     throw new ScanServiceError('analysis_failed', 'Firebase project ID not configured.')
   }
-  const region = import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || 'us-central1'
-  const endpoint = `https://${region}-${projectId}.cloudfunctions.net/analyzeMealImage`
+  const endpoint = `https://${FUNCTIONS_REGION}-${projectId}.cloudfunctions.net/analyzeMealImage`
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
+  const requestBody = {
+    data: {
+      imageData: dataUrl,
+      dateKey: getToday(),
+      ...(options.mealTypeHint && { mealTypeHint: options.mealTypeHint }),
+      ...(options.gramNotes?.trim() && { gramNotes: options.gramNotes.trim() }),
     },
-    body: JSON.stringify({
-      data: {
-        imageUrl,
-        dateKey: getToday(),
-        ...(options.mealTypeHint && { mealTypeHint: options.mealTypeHint }),
-        ...(options.gramNotes?.trim() && { gramNotes: options.gramNotes.trim() }),
-      },
-    }),
+  }
+
+  if (DEBUG_SCAN) console.log('[AI_SCAN] function call starting', {
+    endpoint,
+    bodyKeys: Object.keys(requestBody.data),
+    totalBodySizeKB: Math.round(JSON.stringify(requestBody).length / 1024),
   })
 
-  const payload = await response.json().catch(() => null) as
-    | { result?: AnalyzeMealFunctionResponse; error?: { message?: string; status?: string } }
-    | null
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), NATIVE_TIMEOUT_MS)
+
+  let response: Response
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+      signal: controller.signal,
+    })
+    clearTimeout(timer)
+  } catch (fetchErr) {
+    clearTimeout(timer)
+    const errName = (fetchErr as Error)?.name ?? 'unknown'
+    const errMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
+    console.error('[AI_SCAN] fetch FAILED', {
+      name: errName,
+      message: errMsg,
+      stack: (fetchErr as Error)?.stack,
+    })
+    if (errName === 'AbortError') {
+      throw new ScanServiceError('timeout', 'Analysis timed out after 120s. Please try again.')
+    }
+    throw new ScanServiceError('analysis_failed', `Network error: ${errMsg}`)
+  }
+
+  // ── 4. Parse response safely ──
+  const rawText = await response.text()
+  if (DEBUG_SCAN) console.log('[AI_SCAN] response status', { status: response.status, ok: response.ok })
+  if (DEBUG_SCAN) console.log('[AI_SCAN] raw response preview', { preview: rawText.substring(0, 1000) })
+
+  let payload: { result?: AnalyzeMealFunctionResponse; error?: { message?: string; status?: string } } | null
+  try {
+    payload = JSON.parse(rawText)
+  } catch {
+    console.error('[AI_SCAN] JSON parse failed', { rawPreview: rawText.substring(0, 500) })
+    throw new ScanServiceError(
+      'analysis_failed',
+      `Cloud Function returned invalid JSON (HTTP ${response.status}): ${rawText.substring(0, 200)}`
+    )
+  }
+
+  if (DEBUG_SCAN) console.log('[AI_SCAN] parsed payload', {
+    hasResult: !!payload?.result,
+    hasAnalysis: !!payload?.result?.analysis,
+    hasError: !!payload?.error,
+    errorStatus: payload?.error?.status,
+    errorMessage: payload?.error?.message?.substring(0, 200),
+  })
 
   if (!response.ok || payload?.error || !payload?.result?.analysis) {
     const errorMsg = payload?.error?.message ?? ''
     const status = payload?.error?.status ?? ''
 
     if (status === 'NOT_FOUND' || errorMsg.includes('no_food_detected')) {
-      throw new ScanServiceError(
-        'no_food_detected',
-        'No food detected in the photo. Please take a clear photo of your meal.'
-      )
+      throw new ScanServiceError('no_food_detected', 'No food detected in the photo. Please take a clear photo of your meal.')
     }
     if (status === 'RESOURCE_EXHAUSTED') {
-      throw new ScanServiceError('rate_limited', 'AI service is temporarily busy. Please wait and try again.')
+      throw new ScanServiceError('rate_limited', errorMsg || 'Daily AI scan limit reached.')
+    }
+    if (status === 'FAILED_PRECONDITION') {
+      throw new ScanServiceError('analysis_failed', errorMsg || 'AI analysis is available for Pro users only.')
     }
     if (status === 'DEADLINE_EXCEEDED') {
       throw new ScanServiceError('timeout', 'Analysis timed out. Please try again.')
     }
     throw new ScanServiceError(
       'analysis_failed',
-      errorMsg || `AI analysis service returned an error (${response.status}).`
+      errorMsg || `AI analysis returned an error (HTTP ${response.status}).`
     )
   }
 
+  if (DEBUG_SCAN) console.log('[AI_SCAN] SUCCESS - analysis complete')
   return mapFunctionAnalysis(payload.result)
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => resolve(e.target?.result as string)
+    reader.onerror = () => reject(new ScanServiceError('upload_failed', 'Failed to read image file.'))
+    reader.readAsDataURL(file)
+  })
 }
 
 function mapFunctionAnalysis(response: AnalyzeMealFunctionResponse): AIScanResult {
   const analysis = response.analysis
   return {
-    mealId: response.mealId,
     ...(analysis.mealName && { mealName: analysis.mealName }),
     items: analysis.items,
     totalMacros: {
@@ -309,7 +352,7 @@ export function imageFileToDataUrl(file: File): Promise<string> {
     reader.onload = (e) => resolve(e.target?.result as string)
     reader.onerror = () => reject(new ScanServiceError(
       'upload_failed',
-      'Seçilen fotoğraf okunamadı.'
+      'Could not read the selected photo.'
     ))
     reader.readAsDataURL(file)
   })

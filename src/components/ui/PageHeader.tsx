@@ -38,9 +38,9 @@ export default function PageHeader({
       className="mb-8"
     >
       {showBack && (
-        <button
+        <button type="button"
           onClick={handleBack}
-          className="mb-4 -ml-1 p-1.5 rounded-xl hover:bg-zinc-800/60 active:bg-zinc-800 transition-colors"
+          className="mb-4 -ml-1 p-1.5 rounded-xl hover:bg-zinc-800/60 active:bg-zinc-800 transition-colors duration-75 touch-manipulation"
         >
           <ArrowLeft size={20} className="text-zinc-400" />
         </button>

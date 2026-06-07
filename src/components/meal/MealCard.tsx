@@ -91,7 +91,7 @@ export default function MealCard({ meal, onDelete, onTap, animationDelay = 0 }: 
         </div>
 
         {onDelete && (
-          <button
+          <button type="button"
             onClick={(e) => { e.stopPropagation(); onDelete(meal.id) }}
             className="p-1.5 -mr-1 rounded-lg hover:bg-zinc-800 active:bg-zinc-700 transition-colors"
           >

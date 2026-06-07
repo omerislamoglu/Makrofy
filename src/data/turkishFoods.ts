@@ -3,6 +3,7 @@
 // Not: Bu değerler yaklaşıktır ve beslenme farkındalığı amacıyla kullanılmalıdır.
 
 import { MARKET_MEGA_EXPANSION, RESTAURANT_MENU_FOODS } from './marketAndRestaurantFoods'
+import { EXTRA_EXPANSION_MEGA } from './extraExpansionFoods'
 import { COMPREHENSIVE_FOOD_EXPANSION } from './comprehensiveFoodExpansion'
 
 export interface TurkishFood {
@@ -2744,6 +2745,7 @@ const ALL_TURKISH_FOODS: TurkishFood[] = [
   ...MARKET_MEGA_EXPANSION,
   ...RESTAURANT_MENU_FOODS,
   ...COMPREHENSIVE_FOOD_EXPANSION,
+  ...EXTRA_EXPANSION_MEGA,
 ]
 
 export const TURKISH_FOODS: TurkishFood[] = Array.from(

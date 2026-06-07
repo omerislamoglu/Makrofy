@@ -13,8 +13,6 @@ import type {
 // Set the API key via:
 //   firebase functions:secrets:set AI_VISION_API_KEY
 //
-// Set the provider via the AI_PROVIDER environment variable when needed.
-//
 // Supported providers: "openai" | "gemini" | "anthropic" | "mock"
 
 const aiApiKey = defineSecret("AI_VISION_API_KEY");
@@ -22,7 +20,7 @@ const aiApiKey = defineSecret("AI_VISION_API_KEY");
 const USE_MOCK = process.env.AI_PROVIDER === "mock";
 
 const MODEL_VERSION_MAP: Record<string, string> = {
-  openai: "gpt-4o-mini",
+  openai: "gpt-4o",
   gemini: "gemini-2.5-flash",
   anthropic: "claude-sonnet-4-5",
   mock: "mock-v1",
@@ -59,11 +57,21 @@ async function realAnalysis(
   gramNotes?: string
 ): Promise<AIAnalysisResult> {
   const provider = process.env.AI_PROVIDER ?? "openai";
-  const apiKey = aiApiKey.value();
+
+  // Resolve API key: prefer AI_VISION_API_KEY secret, fallback to env
+  const apiKey = aiApiKey.value() || process.env.OPENAI_API_KEY || process.env.AI_VISION_API_KEY;
+
+  console.log("[AI_PROVIDER]", {
+    provider,
+    hasApiKey: !!apiKey,
+    keyPrefix: apiKey ? apiKey.slice(0, 7) : null,
+    imageIsDataUrl: imageUrl.startsWith("data:"),
+    imageLength: imageUrl.length,
+  });
 
   if (!apiKey) {
     throw new Error(
-      "AI_VISION_API_KEY secret is not set. " +
+      "OPENAI_API_KEY or AI_VISION_API_KEY is missing in Cloud Functions environment. " +
       "Run: firebase functions:secrets:set AI_VISION_API_KEY"
     );
   }
@@ -90,6 +98,7 @@ async function realAnalysis(
 
   const processingTimeMs = Date.now() - start;
   const modelVersion = MODEL_VERSION_MAP[provider] ?? provider;
+  console.log("[AI_PROVIDER] analysis complete", { provider, processingTimeMs, modelVersion, rawJsonLength: rawJson.length });
 
   return parseAIResponse(rawJson, mealTypeHint, processingTimeMs, modelVersion);
 }
@@ -102,75 +111,80 @@ async function callOpenAI(
   userPrompt: string,
   imageUrl: string
 ): Promise<string> {
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: MODEL_VERSION_MAP.openai,
-      instructions: systemPrompt,
-      input: [
-        {
-          role: "user",
-          content: [
-            { type: "input_text", text: userPrompt },
-            { type: "input_image", image_url: imageUrl, detail: "high" },
-          ],
-        },
-      ],
-      max_output_tokens: 12000,
-      reasoning: { effort: "low" },
-    }),
-  });
+  const model = MODEL_VERSION_MAP.openai;
+  console.log("[OPENAI] calling", { model, imageIsDataUrl: imageUrl.startsWith("data:"), imageUrlLength: imageUrl.length });
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`OpenAI API error ${response.status}: ${body}`);
-  }
-
-  const data = (await response.json()) as Record<string, unknown>;
-  const outputText = extractOpenAIText(data);
-
-  if (!outputText) {
-    const status = typeof data.status === "string" ? data.status : "unknown";
-    const details = JSON.stringify(data).slice(0, 1000);
-    throw new Error(
-      `OpenAI API response did not include output text. status=${status} body=${details}`
-    );
-  }
-
-  return outputText;
-}
-
-function extractOpenAIText(value: unknown): string {
-  const parts: string[] = [];
-
-  const walk = (node: unknown, key?: string): void => {
-    if (!node) return;
-
-    if (typeof node === "string") {
-      if (key === "output_text" || key === "text") {
-        parts.push(node);
-      }
-      return;
-    }
-
-    if (Array.isArray(node)) {
-      node.forEach((item) => walk(item));
-      return;
-    }
-
-    if (typeof node === "object") {
-      for (const [childKey, childValue] of Object.entries(node)) {
-        walk(childValue, childKey);
-      }
-    }
+  // OpenAI Chat Completions vision accepts data URLs directly in image_url.url
+  const requestBody = {
+    model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: userPrompt },
+          {
+            type: "image_url",
+            image_url: { url: imageUrl, detail: "high" },
+          },
+        ],
+      },
+    ],
+    max_tokens: 4096,
+    temperature: 0.1,
   };
 
-  walk(value);
-  return parts.join("\n").trim();
+  let response: Response;
+  try {
+    response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(requestBody),
+    });
+  } catch (fetchErr) {
+    console.error("[OPENAI_FETCH_ERROR]", {
+      name: fetchErr instanceof Error ? fetchErr.name : "unknown",
+      message: fetchErr instanceof Error ? fetchErr.message : String(fetchErr),
+    });
+    throw fetchErr;
+  }
+
+  const rawBody = await response.text();
+  console.log("[OPENAI] response", { status: response.status, ok: response.ok, bodyPreview: rawBody.substring(0, 500) });
+
+  if (!response.ok) {
+    // Map OpenAI HTTP errors to descriptive messages
+    const errPrefix = `OpenAI API error ${response.status}`;
+    if (response.status === 401) {
+      throw new Error(`${errPrefix}: API key invalid. ${rawBody.substring(0, 300)}`);
+    }
+    if (response.status === 429) {
+      throw new Error(`${errPrefix}: Rate limited / quota exceeded. ${rawBody.substring(0, 300)}`);
+    }
+    throw new Error(`${errPrefix}: ${rawBody.substring(0, 500)}`);
+  }
+
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(rawBody);
+  } catch {
+    throw new Error(`OpenAI returned invalid JSON: ${rawBody.substring(0, 500)}`);
+  }
+
+  // Extract text from Chat Completions response
+  const choices = data.choices as Array<{ message?: { content?: string } }> | undefined;
+  const outputText = choices?.[0]?.message?.content?.trim();
+
+  if (!outputText) {
+    const details = JSON.stringify(data).slice(0, 1000);
+    throw new Error(`OpenAI response had no content. body=${details}`);
+  }
+
+  console.log("[OPENAI] extracted text", { length: outputText.length });
+  return outputText;
 }
 
 async function callGemini(
@@ -181,9 +195,26 @@ async function callGemini(
 ): Promise<string> {
   const model = MODEL_VERSION_MAP.gemini;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+  // Extract base64 from data URL, or fetch HTTPS URL and convert to base64
+  let mimeType: string;
+  let imageData: string;
   const dataUrlMatch = imageUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
-  const mimeType = dataUrlMatch?.[1] ?? "image/jpeg";
-  const imageData = dataUrlMatch?.[2] ?? imageUrl;
+  if (dataUrlMatch) {
+    mimeType = dataUrlMatch[1];
+    imageData = dataUrlMatch[2];
+  } else {
+    // HTTPS URL → fetch and convert to base64 (Gemini requires inlineData)
+    console.log("[GEMINI] fetching image URL to convert to base64", { urlLength: imageUrl.length });
+    const imgResponse = await fetch(imageUrl);
+    if (!imgResponse.ok) {
+      throw new Error(`Failed to fetch image for Gemini: HTTP ${imgResponse.status}`);
+    }
+    mimeType = imgResponse.headers.get("content-type") || "image/jpeg";
+    const buffer = await imgResponse.arrayBuffer();
+    imageData = Buffer.from(buffer).toString("base64");
+    console.log("[GEMINI] converted image to base64", { mimeType, base64Length: imageData.length });
+  }
 
   const response = await fetch(url, {
     method: "POST",
@@ -208,9 +239,14 @@ async function callGemini(
   }
 
   const data = (await response.json()) as {
-    candidates: { content: { parts: { text: string }[] } }[];
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
   };
-  return data.candidates[0].content.parts[0].text;
+  const outputText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!outputText) {
+    const details = JSON.stringify(data).slice(0, 1000);
+    throw new Error(`Gemini returned no content. Response: ${details}`);
+  }
+  return outputText;
 }
 
 async function callAnthropic(
@@ -219,6 +255,24 @@ async function callAnthropic(
   userPrompt: string,
   imageUrl: string
 ): Promise<string> {
+  // Anthropic: prefer base64 for reliability; fetch HTTPS URLs to base64
+  const dataUrlMatch = imageUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  let imageSource: { type: "base64"; media_type: string; data: string };
+  if (dataUrlMatch) {
+    imageSource = { type: "base64", media_type: dataUrlMatch[1], data: dataUrlMatch[2] };
+  } else {
+    // Fetch HTTPS URL and convert to base64 for max compatibility
+    console.log("[ANTHROPIC] fetching image URL to convert to base64");
+    const imgResponse = await fetch(imageUrl);
+    if (!imgResponse.ok) {
+      throw new Error(`Failed to fetch image for Anthropic: HTTP ${imgResponse.status}`);
+    }
+    const mediaType = imgResponse.headers.get("content-type") || "image/jpeg";
+    const buffer = await imgResponse.arrayBuffer();
+    const base64Data = Buffer.from(buffer).toString("base64");
+    imageSource = { type: "base64", media_type: mediaType, data: base64Data };
+  }
+
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -236,7 +290,7 @@ async function callAnthropic(
           content: [
             {
               type: "image",
-              source: { type: "url", url: imageUrl },
+              source: imageSource,
             },
             { type: "text", text: userPrompt },
           ],
@@ -251,9 +305,14 @@ async function callAnthropic(
   }
 
   const data = (await response.json()) as {
-    content: { text: string }[];
+    content?: { text?: string }[];
   };
-  return data.content[0].text;
+  const outputText = data.content?.[0]?.text;
+  if (!outputText) {
+    const details = JSON.stringify(data).slice(0, 1000);
+    throw new Error(`Anthropic returned no content. Response: ${details}`);
+  }
+  return outputText;
 }
 
 // ─── Response parsing ──────────────────────────────────────────────────────
@@ -401,6 +460,11 @@ function parseAIResponse(
     };
   });
 
+  // ── Known-food sanity check: catch AI confusions like eggs↔yogurt ──
+  for (let i = 0; i < items.length; i++) {
+    items[i] = sanityCheckItem(items[i], warnings);
+  }
+
   // Map clarification questions, linking by index → item ID
   const clarificationQuestions: ClarificationQuestion[] = (
     parsed.clarificationQuestions ?? []
@@ -541,6 +605,122 @@ async function mockAnalysis(mealTypeHint?: MealType): Promise<AIAnalysisResult> 
     processingTimeMs: Date.now() - start,
     modelVersion: "mock-v1",
   };
+}
+
+// ─── Known Food Sanity Check ──────────────────────────────────────────────
+// When the AI identifies a food by name but returns wildly wrong per-100g
+// values, we correct them using known reference data. This catches cases
+// where the model confuses visually similar foods (e.g. eggs ↔ yogurt).
+
+interface FoodRefRange {
+  /** Patterns to match in the food name (lowercase Turkish-normalized) */
+  patterns: string[];
+  /** Exclude if these patterns are also present */
+  exclude?: string[];
+  /** Expected cal/100g range */
+  calPer100g: [number, number];
+  /** Reference per-100g values to use for correction */
+  ref: { cal: number; p: number; c: number; f: number; fib: number };
+}
+
+const KNOWN_FOOD_REFS: FoodRefRange[] = [
+  {
+    patterns: ["yumurta", "haslama yumurta", "haslanmis yumurta"],
+    exclude: ["omlet", "menemen", "sucuklu", "pastirmali", "sahanda", "kaygana"],
+    calPer100g: [120, 200],
+    ref: { cal: 155, p: 13, c: 1.1, f: 11, fib: 0 },
+  },
+  {
+    patterns: ["sahanda yumurta"],
+    calPer100g: [150, 250],
+    ref: { cal: 196, p: 13.6, c: 0.7, f: 15.3, fib: 0 },
+  },
+  {
+    patterns: ["omlet"],
+    exclude: ["peynirli", "sebzeli"],
+    calPer100g: [140, 220],
+    ref: { cal: 185, p: 13, c: 1, f: 14, fib: 0 },
+  },
+  {
+    patterns: ["beyaz pirinc pilav", "pirinc pilavi", "sade pilav"],
+    calPer100g: [110, 200],
+    ref: { cal: 130, p: 2.7, c: 28, f: 0.3, fib: 0 },
+  },
+  {
+    patterns: ["tereyagli pilav", "sehriyeli pilav"],
+    calPer100g: [140, 220],
+    ref: { cal: 175, p: 3.5, c: 30, f: 5, fib: 0 },
+  },
+  {
+    patterns: ["tavuk gogsu"],
+    exclude: ["kizartma", "paneli", "tatli"],
+    calPer100g: [130, 210],
+    ref: { cal: 165, p: 31, c: 0, f: 3.6, fib: 0 },
+  },
+  {
+    patterns: ["makarna"],
+    exclude: ["kremali", "kiymali"],
+    calPer100g: [110, 180],
+    ref: { cal: 131, p: 5, c: 25, f: 1.1, fib: 0 },
+  },
+  {
+    patterns: ["beyaz ekmek", "ekmek dilim"],
+    calPer100g: [230, 300],
+    ref: { cal: 265, p: 9, c: 49, f: 3.2, fib: 0 },
+  },
+];
+
+function normalizeTr(s: string): string {
+  return s
+    .replace(/İ/g, "i")
+    .toLowerCase()
+    .replace(/ı/g, "i").replace(/ğ/g, "g").replace(/ü/g, "u")
+    .replace(/ş/g, "s").replace(/ö/g, "o").replace(/ç/g, "c")
+    .replace(/[^a-z0-9\s]+/g, " ").trim();
+}
+
+/**
+ * If the AI returned a known food but with obviously wrong cal/100g,
+ * recalculate macros from reference values. Returns corrected item or original.
+ */
+function sanityCheckItem(
+  item: AnalysisItem,
+  warnings: string[]
+): AnalysisItem {
+  const normalized = normalizeTr(item.name);
+  const calPer100g = (item.macros.calories / item.grams) * 100;
+
+  for (const ref of KNOWN_FOOD_REFS) {
+    const matches = ref.patterns.some((p) => normalized.includes(p));
+    if (!matches) continue;
+    const excluded = ref.exclude?.some((e) => normalized.includes(e));
+    if (excluded) continue;
+
+    // Check if AI's value is outside expected range
+    if (calPer100g >= ref.calPer100g[0] && calPer100g <= ref.calPer100g[1]) {
+      // Within range, no correction needed
+      return item;
+    }
+
+    // AI value is wrong — recalculate from reference
+    const ratio = item.grams / 100;
+    const corrected = {
+      ...item,
+      macros: {
+        calories: Math.round(ref.ref.cal * ratio),
+        protein: Math.round(ref.ref.p * ratio * 10) / 10,
+        carbs: Math.round(ref.ref.c * ratio * 10) / 10,
+        fat: Math.round(ref.ref.f * ratio * 10) / 10,
+        fiber: Math.round(ref.ref.fib * ratio * 10) / 10,
+      },
+      confidence: "medium" as const,
+    };
+    warnings.push(
+      `${item.name} besin değeri referans verilerle düzeltildi (${Math.round(calPer100g)} → ${ref.ref.cal} kcal/100g).`
+    );
+    return corrected;
+  }
+  return item;
 }
 
 // ─── Utilities ─────────────────────────────────────────────────────────────

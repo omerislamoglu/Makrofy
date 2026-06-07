@@ -7,6 +7,10 @@ import { SNACK_SWEETS } from './snackSweets'
 import { DRINKS } from './drinks'
 import { FRUITS_VEGETABLES } from './fruitsVegetables'
 import { SAUCES_EXTRAS } from './saucesExtras'
+import { TURKISH_RESTAURANT_CHAINS } from './turkishRestaurantChains'
+import { TURKISH_MARKET_PRODUCTS } from './turkishMarketProducts'
+import { MASSIVE_TURKISH_EXPANSION } from './massiveTurkishExpansion'
+import { GLOBAL_MARKET_PRODUCTS } from '../globalMarketProducts'
 import type { FoodCatalogItem } from '../../types/food'
 
 export const CATALOG_FOODS: FoodCatalogItem[] = [
@@ -19,4 +23,8 @@ export const CATALOG_FOODS: FoodCatalogItem[] = [
   ...DRINKS,
   ...FRUITS_VEGETABLES,
   ...SAUCES_EXTRAS,
+  ...TURKISH_RESTAURANT_CHAINS,
+  ...TURKISH_MARKET_PRODUCTS,
+  ...GLOBAL_MARKET_PRODUCTS,
+  ...MASSIVE_TURKISH_EXPANSION,
 ]

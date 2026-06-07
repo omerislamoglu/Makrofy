@@ -69,11 +69,11 @@ export function calculateMacrosForWeight(
 export function sumMacros(items: MacroNutrients[]): MacroNutrients {
   return items.reduce(
     (acc, m) => ({
-      calories: acc.calories + m.calories,
-      protein: acc.protein + m.protein,
-      carbs: acc.carbs + m.carbs,
-      fat: acc.fat + m.fat,
-      fiber: acc.fiber + m.fiber,
+      calories: acc.calories + (m?.calories || 0),
+      protein: acc.protein + (m?.protein || 0),
+      carbs: acc.carbs + (m?.carbs || 0),
+      fat: acc.fat + (m?.fat || 0),
+      fiber: acc.fiber + (m?.fiber || 0),
     }),
     { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 }
   )

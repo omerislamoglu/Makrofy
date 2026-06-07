@@ -2,6 +2,7 @@ import { motion } from 'framer-motion'
 import { Check, Crown } from 'lucide-react'
 import Button from '../ui/Button'
 import Badge from '../ui/Badge'
+import { useLocale } from '../../contexts/LocaleContext'
 
 export interface PaywallFeature {
   label: string
@@ -34,6 +35,7 @@ export interface PaywallCardProps {
   onDismiss?: () => void
   loading?: boolean
   restoring?: boolean
+  upgradeDisabled?: boolean
 }
 
 export default function PaywallCard({
@@ -51,7 +53,10 @@ export default function PaywallCard({
   onDismiss,
   loading = false,
   restoring = false,
+  upgradeDisabled = false,
 }: PaywallCardProps) {
+  const { strings } = useLocale()
+
   return (
     <div className="space-y-5">
       {/* Feature list */}
@@ -159,6 +164,7 @@ export default function PaywallCard({
           size="lg"
           fullWidth
           loading={loading}
+          disabled={upgradeDisabled}
           onClick={onUpgrade}
         >
           {upgradeLabel}
@@ -188,9 +194,20 @@ export default function PaywallCard({
         )}
       </motion.div>
 
-      <p className="text-center text-[11px] text-zinc-600 leading-relaxed">
-        {disclaimer}
-      </p>
+      <div className="text-center space-y-1.5">
+        <p className="text-[11px] text-zinc-600 leading-relaxed">
+          {disclaimer}
+        </p>
+        <p className="text-[11px] text-zinc-600">
+          <a href="https://makrofy.app/terms" target="_blank" rel="noopener noreferrer" className="underline">
+            {strings.profile.terms}
+          </a>
+          {' · '}
+          <a href="https://makrofy.app/privacy" target="_blank" rel="noopener noreferrer" className="underline">
+            {strings.profile.privacyPolicy}
+          </a>
+        </p>
+      </div>
     </div>
   )
 }

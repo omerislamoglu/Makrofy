@@ -74,4 +74,50 @@ export const PROTEIN_FOODS: FoodCatalogItem[] = [
   food({ id: 'cat-whey-protein', name: 'Whey Protein (1 Ölçek)', cat: 'Sporcu Besinleri', sub: 'Protein Tozu', cal: 120, p: 24, c: 3, f: 1.5, fib: 0, servings: [S.adet(30, '1 ölçek'), S.custom('2 ölçek', 'adet', 60), S.g100], aliases: ['whey protein', 'protein powder', 'protein tozu'] }),
   food({ id: 'cat-protein-bar', name: 'Protein Bar', cat: 'Sporcu Besinleri', sub: 'Bar', cal: 350, p: 20, c: 35, f: 14, fib: 3, servings: [S.bar(60, '1 bar'), S.g100], aliases: ['protein bar'] }),
   food({ id: 'cat-kazein-protein', name: 'Kazein Protein (1 Ölçek)', cat: 'Sporcu Besinleri', sub: 'Protein Tozu', cal: 110, p: 22, c: 4, f: 1, fib: 0, servings: [S.adet(33, '1 ölçek'), S.g100], aliases: ['casein protein', 'kazein'] }),
+
+  // ── Dana & Kuzu (devam) ──────────────────────────────────
+  food({ id: 'cat-dana-rosto', name: 'Dana Rosto (Fırın)', cat: 'Et & Tavuk', sub: 'Dana', cal: 215, p: 28, c: 1, f: 11, fib: 0, servings: [S.g100, S.porsiyon(150)], aliases: ['roast beef', 'dana rosto'] }),
+  food({ id: 'cat-dana-haslama', name: 'Dana Haşlama', cat: 'Et & Tavuk', sub: 'Dana', cal: 185, p: 28, c: 0, f: 8, fib: 0, servings: [S.g100, S.porsiyon(150)], aliases: ['boiled beef', 'dana haslama', 'haslama et'] }),
+  food({ id: 'cat-kuzu-tandir', name: 'Kuzu Tandır', cat: 'Et & Tavuk', sub: 'Kuzu', cal: 265, p: 26, c: 0, f: 18, fib: 0, servings: [S.g100, S.porsiyon(200)], aliases: ['lamb tandoor', 'kuzu tandir'] }),
+  food({ id: 'cat-kuzu-kapama', name: 'Kuzu Kapama', cat: 'Et & Tavuk', sub: 'Kuzu', cal: 195, p: 22, c: 3, f: 11, fib: 0.5, servings: [S.g100, S.porsiyon(250)], aliases: ['lamb kapama', 'kuzu kapama'] }),
+  food({ id: 'cat-tavuk-pirzola', name: 'Tavuk Pirzola (Izgara)', cat: 'Et & Tavuk', sub: 'Tavuk', cal: 170, p: 27, c: 0, f: 7, fib: 0, servings: [S.g100, S.porsiyon(150)], aliases: ['chicken cutlet', 'tavuk pirzola'] }),
+
+  // ── Balık (devam) ────────────────────────────────────────
+  food({ id: 'cat-palamut-izgara', name: 'Palamut (Izgara)', cat: 'Balık & Deniz Ürünleri', sub: 'Balık', cal: 168, p: 23, c: 0, f: 8, fib: 0, servings: [S.g100, S.porsiyon(180)], aliases: ['bonito', 'palamut'] }),
+  food({ id: 'cat-lufer-izgara', name: 'Lüfer (Izgara)', cat: 'Balık & Deniz Ürünleri', sub: 'Balık', cal: 124, p: 20, c: 0, f: 4.5, fib: 0, servings: [S.g100, S.porsiyon(180)], aliases: ['bluefish', 'lufer'] }),
+  food({ id: 'cat-istavrit-tava', name: 'İstavrit (Tava)', cat: 'Balık & Deniz Ürünleri', sub: 'Balık', cal: 158, p: 20, c: 2, f: 8, fib: 0, servings: [S.g100, S.porsiyon(150)], aliases: ['horse mackerel', 'istavrit'] }),
+  food({ id: 'cat-sardalya-izgara', name: 'Sardalya (Izgara)', cat: 'Balık & Deniz Ürünleri', sub: 'Balık', cal: 208, p: 25, c: 0, f: 11.5, fib: 0, servings: [S.g100, S.porsiyon(150)], aliases: ['sardine', 'sardalya'] }),
+  food({ id: 'cat-alabalik-izgara', name: 'Alabalık (Izgara)', cat: 'Balık & Deniz Ürünleri', sub: 'Balık', cal: 148, p: 21, c: 0, f: 7, fib: 0, servings: [S.g100, S.porsiyon(200)], aliases: ['trout', 'alabalik'] }),
+  food({ id: 'cat-uskumru-izgara', name: 'Uskumru (Izgara)', cat: 'Balık & Deniz Ürünleri', sub: 'Balık', cal: 205, p: 19, c: 0, f: 14, fib: 0, servings: [S.g100, S.porsiyon(180)], aliases: ['mackerel', 'uskumru'] }),
+  food({ id: 'cat-kalkan-izgara', name: 'Kalkan (Izgara)', cat: 'Balık & Deniz Ürünleri', sub: 'Balık', cal: 118, p: 21, c: 0, f: 3.5, fib: 0, servings: [S.g100, S.porsiyon(200)], aliases: ['turbot', 'kalkan'] }),
+  food({ id: 'cat-barbun-tava', name: 'Barbun (Tava)', cat: 'Balık & Deniz Ürünleri', sub: 'Balık', cal: 155, p: 19, c: 1.5, f: 8, fib: 0, servings: [S.g100, S.porsiyon(150)], aliases: ['red mullet', 'barbun', 'barbunya baligi'] }),
+  food({ id: 'cat-mezgit-tava', name: 'Mezgit (Tava)', cat: 'Balık & Deniz Ürünleri', sub: 'Balık', cal: 135, p: 18, c: 3, f: 5.5, fib: 0, servings: [S.g100, S.porsiyon(150)], aliases: ['whiting', 'mezgit'] }),
+  food({ id: 'cat-ahtapot-izgara', name: 'Ahtapot (Izgara)', cat: 'Balık & Deniz Ürünleri', sub: 'Deniz Ürünleri', cal: 139, p: 25, c: 4, f: 1.8, fib: 0, servings: [S.g100, S.porsiyon(150)], aliases: ['octopus', 'ahtapot'] }),
+
+  // ── Tavuk & Kümes (devam) ────────────────────────────────
+  food({ id: 'cat-tavuk-ciger', name: 'Tavuk Ciğeri (Sote)', cat: 'Et & Tavuk', sub: 'Sakatat', cal: 172, p: 24, c: 1, f: 8, fib: 0, servings: [S.g100, S.porsiyon(150)], aliases: ['chicken liver', 'tavuk ciger'] }),
+  food({ id: 'cat-bildircin', name: 'Bıldırcın (Izgara)', cat: 'Et & Tavuk', sub: 'Tavuk', cal: 227, p: 25, c: 0, f: 14, fib: 0, servings: [S.g100, S.adet(120, '1 adet')], aliases: ['quail', 'bildircin'] }),
+  food({ id: 'cat-hindi-but', name: 'Hindi But (Fırın)', cat: 'Et & Tavuk', sub: 'Hindi', cal: 184, p: 28, c: 0, f: 7.5, fib: 0, servings: [S.g100, S.porsiyon(150)], aliases: ['turkey leg', 'hindi but'] }),
+
+  // ── Deniz Ürünleri (devam) ───────────────────────────────
+  food({ id: 'cat-yengec', name: 'Yengeç (Haşlama)', cat: 'Balık & Deniz Ürünleri', sub: 'Deniz Ürünleri', cal: 97, p: 19, c: 0, f: 1.5, fib: 0, servings: [S.g100, S.porsiyon(150)], aliases: ['crab', 'yengec'] }),
+  food({ id: 'cat-istakoz', name: 'Istakoz (Haşlama)', cat: 'Balık & Deniz Ürünleri', sub: 'Deniz Ürünleri', cal: 89, p: 19, c: 0, f: 0.9, fib: 0, servings: [S.g100, S.porsiyon(200)], aliases: ['lobster', 'istakoz'] }),
+  food({ id: 'cat-deniz-taragi', name: 'Deniz Tarağı (Haşlama)', cat: 'Balık & Deniz Ürünleri', sub: 'Deniz Ürünleri', cal: 86, p: 15, c: 3, f: 1, fib: 0, servings: [S.g100, S.porsiyon(150)], aliases: ['clams', 'deniz taragi'] }),
+
+  // ── Tavuk & Et (devam 3) ─────────────────────────────────
+  food({ id: 'cat-tavuk-baget', name: 'Tavuk Baget (Fırın)', cat: 'Et & Tavuk', sub: 'Tavuk', cal: 210, p: 18, c: 2, f: 15, fib: 0, servings: [S.g100, S.adet(120, '1 adet')], aliases: ['chicken drumstick', 'tavuk baget'] }),
+  food({ id: 'cat-tavuk-schnitzel', name: 'Tavuk Schnitzel', cat: 'Et & Tavuk', sub: 'Tavuk', cal: 230, p: 18, c: 12, f: 13, fib: 0.5, servings: [S.g100, S.porsiyon(150)], aliases: ['chicken schnitzel', 'tavuk schnitzel', 'tavuk pane'] }),
+  food({ id: 'cat-biftek-tava', name: 'Biftek (Tava)', cat: 'Et & Tavuk', sub: 'Dana', cal: 250, p: 26, c: 0, f: 16, fib: 0, servings: [S.g100, S.porsiyon(180)], aliases: ['pan seared steak', 'biftek'] }),
+  food({ id: 'cat-dana-ciger', name: 'Dana Ciğer (Izgara)', cat: 'Et & Tavuk', sub: 'Sakatat', cal: 175, p: 27, c: 4, f: 5, fib: 0, servings: [S.g100, S.porsiyon(150)], aliases: ['beef liver', 'dana ciger'] }),
+  food({ id: 'cat-dana-but', name: 'Dana But (Fırın)', cat: 'Et & Tavuk', sub: 'Dana', cal: 195, p: 30, c: 0, f: 8, fib: 0, servings: [S.g100, S.porsiyon(150)], aliases: ['beef round', 'dana but'] }),
+  food({ id: 'cat-dana-fileto', name: 'Dana Fileto (Izgara)', cat: 'Et & Tavuk', sub: 'Dana', cal: 188, p: 28, c: 0, f: 8, fib: 0, servings: [S.g100, S.porsiyon(150)], aliases: ['beef fillet', 'dana fileto'] }),
+  food({ id: 'cat-dana-kusbasi', name: 'Dana Kuşbaşı (Sote)', cat: 'Et & Tavuk', sub: 'Dana', cal: 210, p: 25, c: 2, f: 12, fib: 0.5, servings: [S.g100, S.porsiyon(200)], aliases: ['diced beef', 'dana kusbasi'] }),
+  food({ id: 'cat-kuzu-kusbasi', name: 'Kuzu Kuşbaşı (Sote)', cat: 'Et & Tavuk', sub: 'Kuzu', cal: 230, p: 24, c: 2, f: 14, fib: 0.5, servings: [S.g100, S.porsiyon(200)], aliases: ['diced lamb', 'kuzu kusbasi'] }),
+  food({ id: 'cat-kuzu-karin', name: 'Kuzu Karın (Fırın)', cat: 'Et & Tavuk', sub: 'Kuzu', cal: 280, p: 18, c: 0, f: 23, fib: 0, servings: [S.g100, S.porsiyon(150)], aliases: ['lamb belly', 'kuzu karin'] }),
+  food({ id: 'cat-kuzu-gerdan', name: 'Kuzu Gerdan', cat: 'Et & Tavuk', sub: 'Kuzu', cal: 215, p: 22, c: 0, f: 14, fib: 0, servings: [S.g100, S.porsiyon(200)], aliases: ['lamb neck', 'kuzu gerdan'] }),
+  food({ id: 'cat-kuzu-bobrek', name: 'Kuzu Böbrek (Izgara)', cat: 'Et & Tavuk', sub: 'Sakatat', cal: 137, p: 17, c: 1, f: 7, fib: 0, servings: [S.g100, S.porsiyon(120)], aliases: ['lamb kidney', 'kuzu bobrek'] }),
+  food({ id: 'cat-hindi-pirzola', name: 'Hindi Pirzola (Izgara)', cat: 'Et & Tavuk', sub: 'Hindi', cal: 152, p: 29, c: 0, f: 3.5, fib: 0, servings: [S.g100, S.porsiyon(150)], aliases: ['turkey chop', 'hindi pirzola'] }),
+  food({ id: 'cat-sigir-dil', name: 'Sığır Dil (Haşlama)', cat: 'Et & Tavuk', sub: 'Sakatat', cal: 224, p: 16, c: 0, f: 17, fib: 0, servings: [S.g100, S.porsiyon(100)], aliases: ['beef tongue', 'sigir dil'] }),
+  food({ id: 'cat-jambon', name: 'Jambon (Dana)', cat: 'Et & Tavuk', sub: 'İşlenmiş Et', cal: 145, p: 18, c: 2, f: 7, fib: 0, servings: [S.g100, S.dilim(20), S.custom('3 dilim', 'dilim', 60)], aliases: ['ham', 'jambon'] }),
+  food({ id: 'cat-kaz-eti', name: 'Kaz Eti (Fırın)', cat: 'Et & Tavuk', sub: 'Tavuk', cal: 305, p: 25, c: 0, f: 22, fib: 0, servings: [S.g100, S.porsiyon(150)], aliases: ['goose meat', 'kaz eti'] }),
 ]

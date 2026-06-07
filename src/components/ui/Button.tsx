@@ -1,4 +1,4 @@
-import { ButtonHTMLAttributes, forwardRef } from 'react'
+import { ButtonHTMLAttributes, ComponentProps, forwardRef } from 'react'
 import { motion } from 'framer-motion'
 import Spinner from './Spinner'
 
@@ -43,52 +43,46 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       className = '',
       disabled,
       children,
+      type = 'button',
       ...props
     },
     ref
   ) => {
     const isDisabled = disabled || loading
+    const motionProps = props as unknown as ComponentProps<typeof motion.button>
 
     return (
       <motion.button
         ref={ref}
-        whileTap={isDisabled ? undefined : { scale: 0.96 }}
-        whileHover={isDisabled ? undefined : { scale: 1.01 }}
-        transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+        whileTap={isDisabled ? undefined : { scale: 0.985 }}
+        transition={{ duration: 0.06, ease: 'easeOut' }}
         className={[
           'inline-flex items-center justify-center font-medium',
-          'transition-colors duration-150 ease-out',
+          'transition-colors duration-75 ease-out touch-manipulation select-none',
           'disabled:opacity-40 disabled:cursor-not-allowed',
           variants[variant],
           sizes[size],
           fullWidth ? 'w-full' : '',
           className,
         ].join(' ')}
+        type={type}
         disabled={isDisabled}
-        {...(props as any)}
+        {...motionProps}
       >
         {loading ? (
           <Spinner size="sm" />
         ) : (
           <>
             {icon && iconPosition === 'left' && (
-              <motion.span
-                className="flex-shrink-0"
-                whileTap={{ rotate: -12, scale: 1.2 }}
-                transition={{ type: 'spring', stiffness: 500, damping: 15 }}
-              >
+              <span className="flex-shrink-0">
                 {icon}
-              </motion.span>
+              </span>
             )}
             {children && <span>{children}</span>}
             {icon && iconPosition === 'right' && (
-              <motion.span
-                className="flex-shrink-0"
-                whileTap={{ rotate: 12, scale: 1.2 }}
-                transition={{ type: 'spring', stiffness: 500, damping: 15 }}
-              >
+              <span className="flex-shrink-0">
                 {icon}
-              </motion.span>
+              </span>
             )}
           </>
         )}

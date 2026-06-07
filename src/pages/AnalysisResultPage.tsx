@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -52,7 +52,6 @@ interface AIAnalysisItem {
 }
 
 interface AIAnalysisResult {
-  mealId?: string
   mealName: string
   totalCalories: number
   protein: number
@@ -101,7 +100,7 @@ function sumFromItems(items: AIAnalysisItem[]): MacroNutrients {
 // ─── Mock data (used when no router state is present) ───────────────────────
 
 const MOCK_RESULT: AIAnalysisResult = {
-  mealName: 'Tavuk Pilav Tabağı',
+  mealName: 'Chicken and Rice Plate',
   totalCalories: 648,
   protein: 53,
   carbs: 59,
@@ -111,13 +110,13 @@ const MOCK_RESULT: AIAnalysisResult = {
   confidenceScore: 0.78,
   imagePreview: null,
   warnings: [
-    'Pilavdaki tereyağı miktarı net görünmediği için yaklaşık hesaplandı.',
-    'Salata sosu miktarı tahminidir.',
+    'The butter amount in the rice was estimated because it was not clearly visible.',
+    'The salad dressing amount is an estimate.',
   ],
   items: [
     {
       id: createId(),
-      foodName: 'Izgara Tavuk Göğsü (derisiz)',
+      foodName: 'Grilled Chicken Breast (skinless)',
       grams: 150,
       calories: 248,
       protein: 47,
@@ -125,13 +124,13 @@ const MOCK_RESULT: AIAnalysisResult = {
       fat: 5,
       fiber: 0,
       confidence: 'high',
-      reasoning: 'Tabakta ızgara izleri belirgin, orta-büyük boy derisiz göğüs parçası.',
+      reasoning: 'Visible grill marks and a medium-large skinless breast portion.',
       cookingMethod: 'ızgara',
-      portionDescription: 'Yaklaşık 1 büyük porsiyon',
+      portionDescription: 'About 1 large serving',
     },
     {
       id: createId(),
-      foodName: 'Tereyağlı Beyaz Pirinç Pilavı',
+      foodName: 'Buttered White Rice',
       grams: 200,
       calories: 260,
       protein: 5,
@@ -139,13 +138,13 @@ const MOCK_RESULT: AIAnalysisResult = {
       fat: 1,
       fiber: 1,
       confidence: 'medium',
-      reasoning: 'Tabağın yarısını kaplayan pirinç yığını, şehriye taneleri görülüyor.',
+      reasoning: 'Rice covers about half of the plate; small noodle pieces are visible.',
       cookingMethod: 'sade',
-      portionDescription: 'Yaklaşık 1 normal porsiyon',
+      portionDescription: 'About 1 regular serving',
     },
     {
       id: createId(),
-      foodName: 'Mevsim Salatası',
+      foodName: 'Garden Salad',
       grams: 80,
       calories: 16,
       protein: 1,
@@ -153,13 +152,13 @@ const MOCK_RESULT: AIAnalysisResult = {
       fat: 0,
       fiber: 1,
       confidence: 'medium',
-      reasoning: 'Tabağın kenarında küçük yeşillik porsiyon.',
+      reasoning: 'Small portion of greens on the side of the plate.',
       cookingMethod: 'çiğ',
-      portionDescription: 'Küçük porsiyon',
+      portionDescription: 'Small serving',
     },
     {
       id: createId(),
-      foodName: 'Zeytinyağı (salata sosu)',
+      foodName: 'Olive Oil (salad dressing)',
       grams: 14,
       calories: 124,
       protein: 0,
@@ -167,8 +166,8 @@ const MOCK_RESULT: AIAnalysisResult = {
       fat: 14,
       fiber: 0,
       confidence: 'low',
-      reasoning: 'Salata üzerinde yağ parlaklığı görülüyor.',
-      portionDescription: '~1 yemek kaşığı',
+      reasoning: 'Oil sheen is visible on the salad.',
+      portionDescription: '~1 tablespoon',
     },
   ],
 }
@@ -250,7 +249,7 @@ function WarningsBanner({ warnings }: { warnings: string[] }) {
             </p>
           ))}
         </div>
-        <button
+        <button type="button"
           onClick={() => setDismissed(true)}
           className="text-zinc-500 hover:text-zinc-300 transition-colors flex-shrink-0"
         >
@@ -428,7 +427,7 @@ function FoodItemCard({
                       autoFocus
                       className="flex-1 h-8 px-2.5 bg-zinc-800 rounded-lg text-sm text-zinc-100 border border-zinc-600 focus:outline-none focus:border-zinc-400 transition-colors"
                     />
-                    <button
+                    <button type="button"
                       onClick={(e) => { e.stopPropagation(); confirmNameEdit() }}
                       className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all"
                     >
@@ -436,7 +435,7 @@ function FoodItemCard({
                     </button>
                   </div>
                 ) : (
-                  <button
+                  <button type="button"
                     onClick={(e) => { e.stopPropagation(); setEditingName(true) }}
                     className="w-full h-8 px-2.5 bg-zinc-800/50 rounded-lg text-sm text-left text-zinc-300 border border-zinc-800/60 hover:border-zinc-700 flex items-center justify-between transition-colors"
                   >
@@ -452,7 +451,7 @@ function FoodItemCard({
                   {an.estimatedGrams}
                 </span>
                 <div className="flex items-center gap-1.5">
-                  <button
+                  <button type="button"
                     id={`decrease-grams-${index}`}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -471,7 +470,7 @@ function FoodItemCard({
                     className="w-16 h-8 px-2 bg-zinc-800 rounded-lg text-sm text-center font-medium tabular-nums border border-zinc-700/50 focus:outline-none focus:border-zinc-500 transition-colors"
                     min={1}
                   />
-                  <button
+                  <button type="button"
                     id={`increase-grams-${index}`}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -485,7 +484,7 @@ function FoodItemCard({
               </div>
 
               {/* Remove button */}
-              <button
+              <button type="button"
                 id={`remove-item-${index}`}
                 onClick={(e) => {
                   e.stopPropagation()
@@ -535,7 +534,7 @@ function AddItemInline({ onAdd }: { onAdd: (item: AIAnalysisItem) => void }) {
       fat,
       fiber: 0,
       confidence: 'high',
-      reasoning: 'Kullanıcı tarafından manuel eklendi.',
+      reasoning: 'Added manually by the user.',
       portionDescription: `${grams}g`,
     })
     setName('')
@@ -609,11 +608,11 @@ function AddItemInline({ onAdd }: { onAdd: (item: AIAnalysisItem) => void }) {
       </div>
 
       <div className="flex gap-2">
-        <button onClick={() => setOpen(false)}
+        <button type="button" onClick={() => setOpen(false)}
           className="flex-1 h-9 rounded-xl text-[12px] text-zinc-400 border border-zinc-800/40 hover:bg-zinc-800/40 transition-all">
           {an.cancel}
         </button>
-        <button onClick={handleAdd} disabled={!name.trim()}
+        <button type="button" onClick={handleAdd} disabled={!name.trim()}
           className="flex-1 h-9 rounded-xl text-[12px] font-medium text-white bg-white/10 hover:bg-white/15 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5">
           <PlusCircle size={13} />
           {an.addButton}
@@ -634,7 +633,6 @@ export default function AnalysisResultPage() {
 
   const routerState = location.state as {
     result?: {
-      mealId?: string
       mealName?: string
       items: Array<{
         id: string
@@ -661,7 +659,6 @@ export default function AnalysisResultPage() {
     if (routerState?.result) {
       const r = routerState.result
       return {
-        mealId: r.mealId,
         mealName: r.mealName || strings.mealType[r.suggestedMealType as keyof typeof strings.mealType] || r.suggestedMealType,
         totalCalories: r.totalMacros.calories,
         protein: r.totalMacros.protein,
@@ -701,6 +698,8 @@ export default function AnalysisResultPage() {
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  // Çift save'i engeller (state async olduğundan ref daha güvenli)
+  const isSavingRef = useRef(false)
 
   const totals = useMemo(() => sumFromItems(items), [items])
 
@@ -739,19 +738,19 @@ export default function AnalysisResultPage() {
   }, [])
 
   const handleSaveMeal = useCallback(async () => {
-    if (import.meta.env.DEV) console.debug('[AI_SAVE] clicked')
+    if (import.meta.env.DEV) console.log('[AI_SAVE] clicked')
     if (!user?.uid) return
-    if (saving || saved) return
+    if (isSavingRef.current || saved) return
+    isSavingRef.current = true
     setSaving(true)
     setSaveError(null)
-    try {
-      if (import.meta.env.DEV) console.debug('[AI_SAVE] currentUser', { uid: user.uid })
-      if (import.meta.env.DEV) console.debug('[AI_SAVE] raw analysis result', routerState?.result ?? initialResult)
 
+    if (import.meta.env.DEV) console.log('[AI_SAVE] user uid', user.uid)
+
+    try {
       const normalizedMeal = {
         mealType: (routerState?.result?.suggestedMealType as MealType | undefined) ?? 'lunch',
         source: 'ai_scan' as const,
-        ...(initialResult.imagePreview && { imageUrl: initialResult.imagePreview }),
         confidence: initialResult.confidence,
         items: items.map((item) => ({
           id: item.id,
@@ -774,29 +773,39 @@ export default function AnalysisResultPage() {
         dateKey: getToday(),
         notes: initialResult.mealName,
       }
-      if (import.meta.env.DEV) console.debug('[AI_SAVE] normalizedMeal', normalizedMeal)
-      if (import.meta.env.DEV) {
-        console.debug('[AI_SAVE] firestore path', {
-          path: initialResult.mealId
-            ? `users/${user.uid}/meals/${initialResult.mealId}`
-            : `users/${user.uid}/meals/{newMealId}`,
-        })
-      }
-      const meal = await saveAIScanMeal(user.uid, normalizedMeal, initialResult.mealId)
-      if (import.meta.env.DEV) {
-        console.debug('[AI_SAVE] mealService result', meal)
-        console.debug('[AI_SAVE] save success mealId', meal.id)
-      }
+
+      if (import.meta.env.DEV) console.log('[AI_SAVE] normalized payload', {
+        itemCount: normalizedMeal.items.length,
+        totalCalories: normalizedMeal.totalMacros.calories,
+        mealType: normalizedMeal.mealType,
+        dateKey: normalizedMeal.dateKey,
+      })
+
+      // Always save — analyzeMealImage no longer creates a meal document
+      const meal = await saveAIScanMeal(user.uid, normalizedMeal)
+      if (import.meta.env.DEV) console.log('[AI_SAVE] saveAIScanMeal returned', { mealId: meal.id })
+
       setSaved(true)
-      if (import.meta.env.DEV) console.debug('[AI_SAVE] navigate home')
-      setTimeout(() => navigate('/'), 800)
+      isSavingRef.current = false
+      window.dispatchEvent(new CustomEvent('makrofy:meals-updated'))
+      if (import.meta.env.DEV) console.log('[AI_SAVE] navigating home')
+      navigate('/', { replace: true, state: { refreshMeals: Date.now() } })
     } catch (error) {
-      console.error('[AI_SAVE] save failed full error', serializeError(error))
-      setSaveError(getSaveErrorMessage(error))
-    } finally {
+      console.error('[AI_SAVE] catch full error', serializeError(error))
+      const err = serializeError(error)
+      const isLoadFailed =
+        err.message?.includes('Load failed') ||
+        err.message?.includes('Failed to fetch') ||
+        err.name === 'TypeError'
+      setSaveError(
+        isLoadFailed
+          ? 'Could not save the meal. Please check your connection and try again.'
+          : getSaveErrorMessage(error)
+      )
+      isSavingRef.current = false
       setSaving(false)
     }
-  }, [initialResult.confidence, initialResult.imagePreview, initialResult.mealId, initialResult.mealName, items, navigate, routerState?.result?.suggestedMealType, saved, saving, totals, user?.uid])
+  }, [initialResult.confidence, initialResult.mealName, items, navigate, routerState?.result?.suggestedMealType, saved, totals, user?.uid])
 
   const handleReAnalyze = useCallback(() => {
     navigate('/add')
@@ -831,7 +840,7 @@ export default function AnalysisResultPage() {
               {an.aiSubtitle}
             </p>
           </div>
-          <button
+          <button type="button"
             id="re-analyze-button"
             onClick={handleReAnalyze}
             className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800/60 flex items-center justify-center hover:bg-zinc-800 active:scale-95 transition-all"
@@ -1004,7 +1013,7 @@ export default function AnalysisResultPage() {
                   >
                     <X size={14} className="text-red-400 flex-shrink-0" />
                     <p className="text-[13px] text-red-400">{saveError}</p>
-                    <button onClick={() => setSaveError(null)} className="ml-auto p-1 rounded-lg hover:bg-red-500/10">
+                    <button type="button" onClick={() => setSaveError(null)} className="ml-auto p-1 rounded-lg hover:bg-red-500/10">
                       <X size={12} className="text-red-400" />
                     </button>
                   </motion.div>

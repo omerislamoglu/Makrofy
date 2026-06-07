@@ -13,6 +13,7 @@
 import { Capacitor } from '@capacitor/core'
 import type { Subscription, SubscriptionPlan, SubscriptionStatus } from '../types/subscription'
 import { createId } from '../utils/id'
+import { detectCurrencyInfo, formatCurrencyAmount } from '../i18n'
 
 // ─── Product IDs ────────────────────────────────────────────────────────────
 // These must match your App Store Connect / Play Store & RevenueCat setup.
@@ -53,6 +54,18 @@ function warnRevenueCatDisabled(message = 'RevenueCat not configured, subscripti
   if (rcDisabledWarningShown) return
   rcDisabledWarningShown = true
   console.warn(`[RevenueCat] ${message}`)
+}
+
+function getActiveEntitlement(customerInfo: {
+  entitlements?: { active?: Record<string, {
+    identifier?: string
+    productIdentifier?: string
+    originalPurchaseDate?: string
+    expirationDate?: string | null
+  }> }
+}) {
+  const active = customerInfo.entitlements?.active ?? {}
+  return active[ENTITLEMENT_ID] ?? Object.values(active)[0] ?? null
 }
 
 // ─── Initialize RevenueCat ──────────────────────────────────────────────────
@@ -118,6 +131,23 @@ export async function identifyUser(userId: string): Promise<void> {
   return rcIdentifyPromise
 }
 
+export async function getCurrentRevenueCatAppUserId(): Promise<string | null> {
+  if (!Capacitor.isNativePlatform()) return null
+  if (!rcInitialized) await initRevenueCat()
+  if (!rcConfigured) return null
+
+  try {
+    const { Purchases } = await import('@revenuecat/purchases-capacitor')
+    const result = await (Purchases as unknown as {
+      getAppUserID?: () => Promise<{ appUserID?: string }>
+    }).getAppUserID?.()
+    return result?.appUserID ?? null
+  } catch (err) {
+    console.warn('[RevenueCat] getAppUserID error:', err)
+    return null
+  }
+}
+
 async function identifyUserOnce(userId: string): Promise<void> {
   if (!rcInitialized) await initRevenueCat(userId)
   if (!rcConfigured) {
@@ -166,7 +196,7 @@ export async function checkProStatus(): Promise<boolean> {
   try {
     const { Purchases } = await import('@revenuecat/purchases-capacitor')
     const { customerInfo } = await Purchases.getCustomerInfo()
-    const entitlement = customerInfo.entitlements.active[ENTITLEMENT_ID]
+    const entitlement = getActiveEntitlement(customerInfo)
     return !!entitlement
   } catch (err) {
     console.warn('[RevenueCat] checkProStatus error:', err)
@@ -184,6 +214,31 @@ export interface RCPackage {
   priceAmount: number
   currencyCode: string
   period: string // "P1M", "P3M", "P1Y"
+}
+
+interface RevenueCatProduct {
+  identifier: string
+  title: string
+  priceString: string
+  price: number
+  currencyCode: string
+  subscriptionPeriod?: string | null
+}
+
+interface RevenueCatPackage {
+  identifier: string
+  product: RevenueCatProduct
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback
+}
+
+function isPurchaseCancelled(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const record = error as { code?: unknown; message?: unknown }
+  const message = typeof record.message === 'string' ? record.message.toLowerCase() : ''
+  return record.code === 1 || message.includes('cancelled') || message.includes('canceled')
 }
 
 export async function getOfferings(): Promise<RCPackage[]> {
@@ -218,23 +273,23 @@ async function getOfferingsOnce(): Promise<RCPackage[]> {
 
     if (!current) {
       console.warn('[RevenueCat] No current offering')
-      return getMockPackages()
+      return []
     }
 
-    const packages = current.availablePackages.map((pkg: any) => ({
-      identifier: pkg.identifier as string,
-      productId: pkg.product.identifier as string,
-      title: pkg.product.title as string,
-      price: pkg.product.priceString as string,
-      priceAmount: pkg.product.price as number,
-      currencyCode: pkg.product.currencyCode as string,
-      period: (pkg.product.subscriptionPeriod ?? '') as string,
+    const packages = (current.availablePackages as RevenueCatPackage[]).map((pkg) => ({
+      identifier: pkg.identifier,
+      productId: pkg.product.identifier,
+      title: pkg.product.title,
+      price: pkg.product.priceString,
+      priceAmount: pkg.product.price,
+      currencyCode: pkg.product.currencyCode,
+      period: pkg.product.subscriptionPeriod ?? '',
     }))
     rcOfferingsCache = packages
     return packages
   } catch (err) {
     console.warn('[RevenueCat] getOfferings error:', err)
-    return getMockPackages()
+    return []
   }
 }
 
@@ -253,11 +308,11 @@ export async function purchasePackage(packageId: string): Promise<PurchaseResult
   }
 
   if (!isRevenueCatProductionConfigured()) {
-    return { success: false, isPro: false, error: 'Abonelikler şu anda aktif değil' }
+    return { success: false, isPro: false, error: 'Subscriptions are currently unavailable' }
   }
   if (!rcInitialized) await initRevenueCat()
   if (!rcConfigured) {
-    return { success: false, isPro: false, error: 'Abonelikler şu anda aktif değil' }
+    return { success: false, isPro: false, error: 'Subscriptions are currently unavailable' }
   }
 
   try {
@@ -267,14 +322,14 @@ export async function purchasePackage(packageId: string): Promise<PurchaseResult
     if (!current) throw new Error('No offering available')
 
     const pkg = current.availablePackages?.find(
-      (p: any) => p.identifier === packageId || p.product.identifier === packageId
+      (p: RevenueCatPackage) => p.identifier === packageId || p.product.identifier === packageId
     )
     if (!pkg) throw new Error(`Package not found: ${packageId}`)
 
     const { customerInfo } = await Purchases.purchasePackage({ aPackage: pkg })
-    const isPro = !!customerInfo.entitlements.active[ENTITLEMENT_ID]
+    const entitlement = getActiveEntitlement(customerInfo)
+    const isPro = !!entitlement
 
-    const entitlement = customerInfo.entitlements.active[ENTITLEMENT_ID]
     const subscription: Subscription = {
       id: entitlement?.identifier ?? createId(),
       userId: customerInfo.originalAppUserId,
@@ -290,16 +345,16 @@ export async function purchasePackage(packageId: string): Promise<PurchaseResult
     }
 
     return { success: true, isPro, subscription }
-  } catch (err: any) {
+  } catch (err: unknown) {
     // User cancelled purchase
-    if (err?.code === 1 || err?.message?.includes('cancelled') || err?.message?.includes('canceled')) {
+    if (isPurchaseCancelled(err)) {
       return { success: false, isPro: false, error: 'cancelled' }
     }
     console.error('[RevenueCat] Purchase error:', err)
     return {
       success: false,
       isPro: false,
-      error: err?.message || 'Satın alma başarısız',
+      error: getErrorMessage(err, 'Purchase failed'),
     }
   }
 }
@@ -312,24 +367,24 @@ export async function restorePurchases(): Promise<PurchaseResult> {
   }
 
   if (!isRevenueCatProductionConfigured()) {
-    return { success: false, isPro: false, error: 'Abonelikler şu anda aktif değil' }
+    return { success: false, isPro: false, error: 'Subscriptions are currently unavailable' }
   }
   if (!rcInitialized) await initRevenueCat()
   if (!rcConfigured) {
-    return { success: false, isPro: false, error: 'Abonelikler şu anda aktif değil' }
+    return { success: false, isPro: false, error: 'Subscriptions are currently unavailable' }
   }
 
   try {
     const { Purchases } = await import('@revenuecat/purchases-capacitor')
     const { customerInfo } = await Purchases.restorePurchases()
-    const isPro = !!customerInfo.entitlements.active[ENTITLEMENT_ID]
+    const entitlement = getActiveEntitlement(customerInfo)
+    const isPro = !!entitlement
 
     if (isPro) {
-      const entitlement = customerInfo.entitlements.active[ENTITLEMENT_ID]
       const subscription: Subscription = {
         id: entitlement?.identifier ?? createId(),
         userId: customerInfo.originalAppUserId,
-        plan: 'pro_yearly', // best guess from restore
+        plan: productIdToPlan(entitlement?.productIdentifier ?? ''),
         status: 'active',
         platform: 'ios',
         productId: entitlement?.productIdentifier ?? '',
@@ -342,13 +397,13 @@ export async function restorePurchases(): Promise<PurchaseResult> {
       return { success: true, isPro: true, subscription }
     }
 
-    return { success: false, isPro: false, error: 'Aktif abonelik bulunamadı' }
-  } catch (err: any) {
+    return { success: false, isPro: false, error: 'No active subscription found' }
+  } catch (err: unknown) {
     console.error('[RevenueCat] Restore error:', err)
     return {
       success: false,
       isPro: false,
-      error: err?.message || 'Geri yükleme başarısız',
+      error: getErrorMessage(err, 'Restore failed'),
     }
   }
 }
@@ -368,32 +423,35 @@ function productIdToPlan(productId: string): SubscriptionPlan {
 const MOCK_STORAGE_KEY = 'makrofy_rc_subscription'
 
 function getMockPackages(): RCPackage[] {
+  const rawLocale = navigator.language || 'en-US'
+  const { currencyCode, monthly, quarterly, yearly } = detectCurrencyInfo(rawLocale)
+
   return [
     {
       identifier: 'pro_yearly',
       productId: PRODUCT_IDS.pro_yearly,
-      title: 'Makrofy Pro Yıllık',
-      price: '₺899,99/yıl',
-      priceAmount: 899.99,
-      currencyCode: 'TRY',
+      title: 'Makrofy Pro Yearly',
+      price: `${formatCurrencyAmount(yearly, currencyCode, rawLocale)}/year`,
+      priceAmount: yearly,
+      currencyCode,
       period: 'P1Y',
     },
     {
       identifier: 'pro_quarterly',
       productId: PRODUCT_IDS.pro_quarterly,
-      title: 'Makrofy Pro 3 Aylık',
-      price: '₺349,99/3ay',
-      priceAmount: 349.99,
-      currencyCode: 'TRY',
+      title: 'Makrofy Pro Quarterly',
+      price: `${formatCurrencyAmount(quarterly, currencyCode, rawLocale)}/3mo`,
+      priceAmount: quarterly,
+      currencyCode,
       period: 'P3M',
     },
     {
       identifier: 'pro_monthly',
       productId: PRODUCT_IDS.pro_monthly,
-      title: 'Makrofy Pro Aylık',
-      price: '₺149,99/ay',
-      priceAmount: 149.99,
-      currencyCode: 'TRY',
+      title: 'Makrofy Pro Monthly',
+      price: `${formatCurrencyAmount(monthly, currencyCode, rawLocale)}/mo`,
+      priceAmount: monthly,
+      currencyCode,
       period: 'P1M',
     },
   ]
@@ -437,7 +495,7 @@ async function restoreMock(): Promise<PurchaseResult> {
       return { success: true, isPro: true, subscription: sub }
     }
   }
-  return { success: false, isPro: false, error: 'Aktif abonelik bulunamadı' }
+  return { success: false, isPro: false, error: 'No active subscription found' }
 }
 
 function checkProStatusLocal(): boolean {

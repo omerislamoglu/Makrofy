@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { Camera, Plus, ChevronRight, Sparkles, Flame, Zap, Target } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Camera, Plus, ChevronRight, Sparkles, Flame, Zap, Target, Trash2 } from 'lucide-react'
 import { useHaptics } from '../hooks/useCapacitor'
 import { useAuth } from '../hooks/useAuth'
 import type { Meal, MealType } from '../types/meal'
@@ -84,11 +84,24 @@ function MacroRing({ label, current, goal, color, delay }: MacroCardProps) {
   )
 }
 
-function MealPreviewCard({ meal, index, onClick }: { meal: Meal; index: number; onClick: () => void }) {
+function MealPreviewCard({
+  meal,
+  index,
+  onClick,
+  isDeleting,
+  onDeleteRequest,
+}: {
+  meal: Meal
+  index: number
+  onClick: () => void
+  isDeleting: boolean
+  onDeleteRequest: (id: string) => void
+}) {
   const { strings, locale } = useLocale()
+  const haptics = useHaptics()
   const createdAt = typeof meal.createdAt === 'string'
     ? meal.createdAt
-    : meal.createdAt.toDate().toISOString()
+    : meal.createdAt?.toDate?.().toISOString() ?? new Date().toISOString()
   const time = new Date(createdAt).toLocaleTimeString(locale === 'tr' ? 'tr-TR' : 'en-US', {
     hour: '2-digit',
     minute: '2-digit',
@@ -104,7 +117,7 @@ function MealPreviewCard({ meal, index, onClick }: { meal: Meal; index: number; 
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{ opacity: isDeleting ? 0.5 : 1, y: 0 }}
       whileTap={{ scale: 0.97 }}
       transition={{ duration: 0.35, delay: 0.4 + index * 0.08, ease: [0.25, 0.46, 0.45, 0.94] }}
       onClick={onClick}
@@ -126,7 +139,7 @@ function MealPreviewCard({ meal, index, onClick }: { meal: Meal; index: number; 
         </div>
         <div className="flex items-center gap-1.5">
           <div className="text-right">
-            <span className="text-base font-bold tabular-nums">{meal.totalMacros.calories}</span>
+            <span className="text-base font-bold tabular-nums">{meal.totalMacros?.calories ?? 0}</span>
             <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-medium ml-1">kcal</span>
           </div>
           <ChevronRight size={14} className="text-zinc-600" />
@@ -139,11 +152,32 @@ function MealPreviewCard({ meal, index, onClick }: { meal: Meal; index: number; 
         </p>
       </div>
 
-      <div className="flex gap-3 pt-2.5 border-t border-zinc-800/40">
-        <MacroLabel label="P" value={meal.totalMacros.protein} />
-        <MacroLabel label="K" value={meal.totalMacros.carbs} />
-        <MacroLabel label="Y" value={Math.round(meal.totalMacros.fat)} />
-        <MacroLabel label="L" value={meal.totalMacros.fiber} />
+      <div className="flex items-center justify-between pt-2.5 border-t border-zinc-800/40">
+        <div className="flex gap-3">
+          <MacroLabel label="P" value={meal.totalMacros?.protein ?? 0} />
+          <MacroLabel label="K" value={meal.totalMacros?.carbs ?? 0} />
+          <MacroLabel label="Y" value={Math.round(meal.totalMacros?.fat ?? 0)} />
+          <MacroLabel label="L" value={meal.totalMacros?.fiber ?? 0} />
+        </div>
+        <button
+          type="button"
+          disabled={isDeleting}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation()
+            e.preventDefault()
+            haptics.impactMedium()
+            if (import.meta.env.DEV) console.log('[MEAL_DELETE] clicked', { mealId: meal.id })
+            onDeleteRequest(meal.id)
+          }}
+          className="w-9 h-9 rounded-xl flex items-center justify-center text-zinc-500 hover:text-red-400 hover:bg-red-500/10 active:bg-red-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          {isDeleting ? (
+            <div className="w-4 h-4 border-2 border-zinc-600 border-t-red-400 rounded-full animate-spin" />
+          ) : (
+            <Trash2 size={16} />
+          )}
+        </button>
       </div>
     </motion.div>
   )
@@ -202,9 +236,37 @@ export default function HomePage() {
   const haptics = useHaptics()
   const { strings, locale } = useLocale()
   const { user } = useAuth()
-  const { meals, todayMacros, refresh } = useTodayMeals(user?.uid)
-  const { limit, isPro } = useScanLimit(user?.uid)
+  const { meals, todayMacros, refresh, deleteMeal } = useTodayMeals(user?.uid)
+  const { limit, isPro } = useScanLimit(user?.uid, user?.isPro)
   const didMountRef = useRef(false)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [showDeleteToast, setShowDeleteToast] = useState(false)
+  const [deleteError, setDeleteError] = useState(false)
+
+  const handleDeleteRequest = (mealId: string) => {
+    if (deletingId) return
+    setDeleteTarget(mealId)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget || deletingId) return
+    if (import.meta.env.DEV) console.log('[MEAL_DELETE] confirm', { mealId: deleteTarget })
+    setDeletingId(deleteTarget)
+    setDeleteTarget(null)
+    try {
+      await deleteMeal(deleteTarget)
+      if (import.meta.env.DEV) console.log('[MEAL_DELETE] success', { mealId: deleteTarget })
+      setShowDeleteToast(true)
+      setTimeout(() => setShowDeleteToast(false), 2000)
+    } catch (err) {
+      console.error('[MEAL_DELETE] error full', err)
+      setDeleteError(true)
+      setTimeout(() => setDeleteError(false), 3000)
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   useEffect(() => {
     if (!didMountRef.current) {
@@ -314,12 +376,13 @@ export default function HomePage() {
         {user?.bodyMetrics?.goal ? (
           <GoalBanner goal={user.bodyMetrics.goal} />
         ) : (
-          <motion.div
+          <motion.button
+            type="button"
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, delay: 0.25 }}
             onClick={() => navigate('/paywall')}
-            className="bg-zinc-900/70 rounded-xl px-4 py-3 border border-zinc-800/40 flex items-center justify-between mb-4 cursor-pointer hover:bg-zinc-800/50 transition-all duration-200 active:scale-[0.99]"
+            className="w-full bg-zinc-900/70 rounded-xl px-4 py-3 border border-zinc-800/40 flex items-center justify-between mb-4 cursor-pointer hover:bg-zinc-800/50 transition-all duration-200 active:scale-[0.99] text-left"
           >
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
@@ -335,7 +398,7 @@ export default function HomePage() {
               </div>
             </div>
             <ChevronRight size={16} className="text-zinc-600" />
-          </motion.div>
+          </motion.button>
         )}
 
         {/* ── Hedef Kur CTA (bodyMetrics yoksa) ─────────────────────── */}
@@ -389,6 +452,8 @@ export default function HomePage() {
                   meal={meal}
                   index={i}
                   onClick={() => { haptics.impactLight(); navigate('/history') }}
+                  isDeleting={deletingId === meal.id}
+                  onDeleteRequest={handleDeleteRequest}
                 />
               ))}
             </div>
@@ -400,6 +465,75 @@ export default function HomePage() {
           )}
         </div>
       </motion.div>
+
+      {/* Delete confirmation modal */}
+      {deleteTarget !== null && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center px-8"
+        >
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" onClick={() => !deletingId && setDeleteTarget(null)} />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.2 }}
+            className="relative bg-zinc-900 border border-zinc-800/60 rounded-2xl p-5 w-full max-w-xs shadow-xl"
+          >
+            <p className="text-[15px] font-semibold text-zinc-100 text-center mb-5">
+              {strings.meals.deleteConfirmTitle}
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 h-11 rounded-xl text-[13px] font-medium text-zinc-300 bg-zinc-800 border border-zinc-700/50 hover:bg-zinc-700 transition-all"
+              >
+                {strings.meals.deleteCancel}
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteConfirm}
+                className="flex-1 h-11 rounded-xl text-[13px] font-medium text-white bg-red-600 hover:bg-red-500 transition-all flex items-center justify-center gap-2"
+              >
+                <Trash2 size={14} />
+                {strings.meals.deleteConfirm}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
+      {/* Delete toasts */}
+      <AnimatePresence>
+        {showDeleteToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 40 }}
+            transition={{ duration: 0.25 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-zinc-800 border border-zinc-700/50 rounded-xl px-4 py-2.5 shadow-lg"
+          >
+            <p className="text-[13px] text-zinc-200 font-medium whitespace-nowrap">
+              {strings.meals.deleteSuccess}
+            </p>
+          </motion.div>
+        )}
+        {deleteError && (
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 40 }}
+            transition={{ duration: 0.25 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-2.5 shadow-lg"
+          >
+            <p className="text-[13px] text-red-400 font-medium whitespace-nowrap">
+              {strings.meals.deleteError}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

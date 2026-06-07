@@ -35,6 +35,8 @@ export interface UserProfile extends User {
   goalSetupCompleted: boolean   // new: true after multi-step goal onboarding
   preferredUnits: UnitSystem
   mealReminders: boolean
+  weeklySummary: boolean
+  promoNotifs: boolean
   dateKey: string // "YYYY-MM-DD" of last activity — useful for daily reset logic
   bodyMetrics?: BodyMetrics
   hasExistingPlan?: boolean      // did user say they already have a diet plan?

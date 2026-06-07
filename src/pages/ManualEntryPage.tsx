@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Check,
   ChevronDown,
-  Bookmark,
   AlertCircle,
   Utensils,
   Flame,
@@ -42,7 +41,6 @@ interface ManualEntryForm {
   carbsPer100g: string
   fatPer100g: string
   fiberPer100g: string
-  saveAsCustomFood: boolean
 }
 
 interface FormErrors {
@@ -68,7 +66,6 @@ const INITIAL_FORM: ManualEntryForm = {
   carbsPer100g: '',
   fatPer100g: '',
   fiberPer100g: '',
-  saveAsCustomFood: false,
 }
 
 const MEAL_TYPE_VALUES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack']
@@ -84,18 +81,18 @@ const QUICK_FOODS: {
   gramsPerPiece?: number
   suggestUnit?: EntryUnit
 }[] = [
-  { name: 'Haşlanmış Yumurta', caloriesPer100g: 155, proteinPer100g: 12.6, carbsPer100g: 1.1, fatPer100g: 10.6, fiberPer100g: 0, gramsPerPiece: 50, suggestUnit: 'adet' },
-  { name: 'Tavuk Göğsü (Izgara)', caloriesPer100g: 165, proteinPer100g: 31, carbsPer100g: 0, fatPer100g: 3.6, fiberPer100g: 0 },
-  { name: 'Bulgur Pilavı', caloriesPer100g: 83, proteinPer100g: 3.1, carbsPer100g: 18.6, fatPer100g: 0.2, fiberPer100g: 4.5 },
-  { name: 'Beyaz Pirinç Pilavı', caloriesPer100g: 130, proteinPer100g: 2.7, carbsPer100g: 28, fatPer100g: 0.3, fiberPer100g: 0.4 },
-  { name: 'Tam Buğday Ekmeği', caloriesPer100g: 247, proteinPer100g: 13, carbsPer100g: 43, fatPer100g: 3.4, fiberPer100g: 6.8, gramsPerPiece: 30, suggestUnit: 'adet' },
-  { name: 'Muz', caloriesPer100g: 89, proteinPer100g: 1.1, carbsPer100g: 22.8, fatPer100g: 0.3, fiberPer100g: 2.6, gramsPerPiece: 118, suggestUnit: 'adet' },
-  { name: 'Elma', caloriesPer100g: 52, proteinPer100g: 0.3, carbsPer100g: 13.8, fatPer100g: 0.2, fiberPer100g: 2.4, gramsPerPiece: 182, suggestUnit: 'adet' },
-  { name: 'Süzme Yoğurt (%0)', caloriesPer100g: 59, proteinPer100g: 10, carbsPer100g: 3.6, fatPer100g: 0.4, fiberPer100g: 0 },
-  { name: 'Badem', caloriesPer100g: 579, proteinPer100g: 21, carbsPer100g: 22, fatPer100g: 50, fiberPer100g: 12.5 },
-  { name: 'Ceviz', caloriesPer100g: 654, proteinPer100g: 15, carbsPer100g: 14, fatPer100g: 65, fiberPer100g: 6.7 },
-  { name: 'Avokado', caloriesPer100g: 160, proteinPer100g: 2, carbsPer100g: 8.5, fatPer100g: 14.7, fiberPer100g: 6.7, gramsPerPiece: 150, suggestUnit: 'adet' },
-  { name: 'Somon Fileto', caloriesPer100g: 208, proteinPer100g: 20, carbsPer100g: 0, fatPer100g: 13, fiberPer100g: 0 },
+  { name: 'Boiled Egg', caloriesPer100g: 155, proteinPer100g: 12.6, carbsPer100g: 1.1, fatPer100g: 10.6, fiberPer100g: 0, gramsPerPiece: 50, suggestUnit: 'adet' },
+  { name: 'Grilled Chicken Breast', caloriesPer100g: 165, proteinPer100g: 31, carbsPer100g: 0, fatPer100g: 3.6, fiberPer100g: 0 },
+  { name: 'Cooked Bulgur', caloriesPer100g: 83, proteinPer100g: 3.1, carbsPer100g: 18.6, fatPer100g: 0.2, fiberPer100g: 4.5 },
+  { name: 'Cooked White Rice', caloriesPer100g: 130, proteinPer100g: 2.7, carbsPer100g: 28, fatPer100g: 0.3, fiberPer100g: 0.4 },
+  { name: 'Whole Wheat Bread', caloriesPer100g: 247, proteinPer100g: 13, carbsPer100g: 43, fatPer100g: 3.4, fiberPer100g: 6.8, gramsPerPiece: 30, suggestUnit: 'adet' },
+  { name: 'Banana', caloriesPer100g: 89, proteinPer100g: 1.1, carbsPer100g: 22.8, fatPer100g: 0.3, fiberPer100g: 2.6, gramsPerPiece: 118, suggestUnit: 'adet' },
+  { name: 'Apple', caloriesPer100g: 52, proteinPer100g: 0.3, carbsPer100g: 13.8, fatPer100g: 0.2, fiberPer100g: 2.4, gramsPerPiece: 182, suggestUnit: 'adet' },
+  { name: 'Greek Yogurt (0%)', caloriesPer100g: 59, proteinPer100g: 10, carbsPer100g: 3.6, fatPer100g: 0.4, fiberPer100g: 0 },
+  { name: 'Almonds', caloriesPer100g: 579, proteinPer100g: 21, carbsPer100g: 22, fatPer100g: 50, fiberPer100g: 12.5 },
+  { name: 'Walnuts', caloriesPer100g: 654, proteinPer100g: 15, carbsPer100g: 14, fatPer100g: 65, fiberPer100g: 6.7 },
+  { name: 'Avocado', caloriesPer100g: 160, proteinPer100g: 2, carbsPer100g: 8.5, fatPer100g: 14.7, fiberPer100g: 6.7, gramsPerPiece: 150, suggestUnit: 'adet' },
+  { name: 'Salmon Fillet', caloriesPer100g: 208, proteinPer100g: 20, carbsPer100g: 0, fatPer100g: 13, fiberPer100g: 0 },
 ]
 
 // ─── Yardımcılar ────────────────────────────────────────────────────────────
@@ -106,9 +103,9 @@ function parseNum(value: string): number {
 }
 
 function getNumericError(value: string, label: string): string | null {
-  if (!value.trim()) return `${label} gerekli.`
+  if (!value.trim()) return `${label} is required.`
   const parsed = Number(value)
-  if (!Number.isFinite(parsed) || parsed < 0) return `${label} 0 veya daha büyük olmalı.`
+  if (!Number.isFinite(parsed) || parsed < 0) return `${label} must be 0 or more.`
   return null
 }
 
@@ -116,26 +113,26 @@ function validate(form: ManualEntryForm): FormErrors {
   const errors: FormErrors = {}
 
   if (!form.foodName.trim()) {
-    errors.foodName = 'Besin adı gerekli.'
+    errors.foodName = 'Food name is required.'
   }
 
   const qty = Number(form.quantity)
   if (!form.quantity.trim() || !Number.isFinite(qty) || qty <= 0) {
-    errors.quantity = form.entryUnit === 'adet' ? 'Adet sayısını girin.' : 'Geçerli bir gram miktarı girin.'
+    errors.quantity = form.entryUnit === 'adet' ? 'Enter the number of pieces.' : 'Enter a valid gram amount.'
   }
 
   if (form.entryUnit === 'adet') {
     const gpp = Number(form.gramsPerPiece)
     if (!form.gramsPerPiece.trim() || !Number.isFinite(gpp) || gpp <= 0) {
-      errors.gramsPerPiece = '1 adetin gram karşılığını girin.'
+      errors.gramsPerPiece = 'Enter the gram equivalent per piece.'
     }
   }
 
-  const calErr = getNumericError(form.caloriesPer100g, 'Kalori')
+  const calErr = getNumericError(form.caloriesPer100g, 'Calories')
   const proErr = getNumericError(form.proteinPer100g, 'Protein')
-  const carbErr = getNumericError(form.carbsPer100g, 'Karbonhidrat')
-  const fatErr = getNumericError(form.fatPer100g, 'Yağ')
-  const fibErr = getNumericError(form.fiberPer100g, 'Lif')
+  const carbErr = getNumericError(form.carbsPer100g, 'Carbs')
+  const fatErr = getNumericError(form.fatPer100g, 'Fat')
+  const fibErr = getNumericError(form.fiberPer100g, 'Fiber')
 
   if (calErr) errors.caloriesPer100g = calErr
   if (proErr) errors.proteinPer100g = proErr
@@ -190,8 +187,8 @@ function UnitSelector({ value, onChange }: { value: EntryUnit; onChange: (v: Ent
   return (
     <div className="grid grid-cols-2 gap-2">
       {([
-        { value: 'gram' as EntryUnit, label: 'Gram', icon: Scale },
-        { value: 'adet' as EntryUnit, label: 'Adet', icon: Hash },
+        { value: 'gram' as EntryUnit, label: 'Grams', icon: Scale },
+        { value: 'adet' as EntryUnit, label: 'Pieces', icon: Hash },
       ]).map((opt) => {
         const isActive = value === opt.value
         const Icon = opt.icon
@@ -225,7 +222,7 @@ function QuickFoodChips({
   onSelect: (food: (typeof QUICK_FOODS)[number]) => void
 }) {
   return (
-    <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
+    <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide smooth-scroll-area">
       {QUICK_FOODS.map((food) => (
         <button
           key={food.name}
@@ -259,20 +256,20 @@ function LivePreviewCard({ macros, totalGrams, unit, quantity }: {
       <Card variant="subtle" padding="md" className="mb-5" animated={false}>
         <div className="flex items-center justify-between mb-3">
           <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-medium">
-            Bu porsiyon için besin değerleri
+            Nutrients for this portion
           </p>
           {unit === 'adet' && quantity > 0 && (
             <span className="text-[10px] text-zinc-400 tabular-nums">
-              {quantity} adet · {totalGrams}g
+              {quantity} pieces · {totalGrams}g
             </span>
           )}
         </div>
         <div className="flex justify-around text-center">
-          <PreviewStat icon={Flame} label="Kal" value={macros.calories} unit="kcal" />
+          <PreviewStat icon={Flame} label="Cal" value={macros.calories} unit="kcal" />
           <PreviewStat icon={Beef} label="Protein" value={macros.protein} unit="g" />
-          <PreviewStat icon={Wheat} label="Karb" value={macros.carbs} unit="g" />
-          <PreviewStat icon={Droplets} label="Yağ" value={macros.fat} unit="g" />
-          <PreviewStat icon={Leaf} label="Lif" value={macros.fiber} unit="g" />
+          <PreviewStat icon={Wheat} label="Carbs" value={macros.carbs} unit="g" />
+          <PreviewStat icon={Droplets} label="Fat" value={macros.fat} unit="g" />
+          <PreviewStat icon={Leaf} label="Fiber" value={macros.fiber} unit="g" />
         </div>
       </Card>
     </motion.div>
@@ -375,7 +372,7 @@ export default function ManualEntryPage() {
 
     try {
       const foodName = form.entryUnit === 'adet'
-        ? `${form.foodName} (${parseNum(form.quantity)} adet)`
+        ? `${form.foodName} (${parseNum(form.quantity)} pieces)`
         : form.foodName
 
       await createMeal(user.uid, {
@@ -395,11 +392,11 @@ export default function ManualEntryPage() {
       setSaving(false)
       setSaved(true)
       setTimeout(() => navigate('/'), 1000)
-    } catch (err) {
+    } catch {
       setSaving(false)
       setErrors({ form: mn.saveFailed })
     }
-  }, [form, navigate, totalGrams, user])
+  }, [form, mn.loginRequired, mn.saveFailed, navigate, totalGrams, user])
 
   const errorCount = Object.keys(errors).length
 
@@ -500,7 +497,7 @@ export default function ManualEntryPage() {
                 value={form.gramsPerPiece}
                 onChange={(e) => updateField('gramsPerPiece', e.target.value)}
                 error={errors.gramsPerPiece}
-                hint={totalGrams > 0 ? `Toplam: ${Math.round(totalGrams)}g` : undefined}
+                hint={totalGrams > 0 ? `Total: ${Math.round(totalGrams)}g` : undefined}
                 leftIcon={<Scale size={16} />}
                 inputMode="decimal"
                 min={0}
@@ -608,38 +605,6 @@ export default function ManualEntryPage() {
             quantity={parseNum(form.quantity)}
           />
         </AnimatePresence>
-
-        {/* ── Özel besin olarak kaydet ─────────────────────────────── */}
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.25 }} className="mb-6">
-          <button
-            id="save-custom-food-toggle"
-            type="button"
-            onClick={() => updateField('saveAsCustomFood', !form.saveAsCustomFood)}
-            className={`
-              w-full rounded-xl px-4 py-3.5 flex items-center gap-3
-              transition-all duration-200 active:scale-[0.99]
-              ${form.saveAsCustomFood
-                ? 'bg-white/5 border border-white/15'
-                : 'bg-zinc-900 border border-zinc-800/50 hover:bg-zinc-800/60'
-              }
-            `}
-          >
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${form.saveAsCustomFood ? 'bg-white/10' : 'bg-zinc-800'}`}>
-              <Bookmark size={15} className={form.saveAsCustomFood ? 'text-white' : 'text-zinc-500'} fill={form.saveAsCustomFood ? 'currentColor' : 'none'} />
-            </div>
-            <div className="text-left flex-1">
-              <p className="text-[13px] font-medium text-zinc-200">{mn.saveAsCustom}</p>
-              <p className="text-[11px] text-zinc-500">{mn.saveAsCustomSub}</p>
-            </div>
-            <div className={`w-10 h-6 rounded-full transition-all duration-200 flex items-center px-0.5 ${form.saveAsCustomFood ? 'bg-white' : 'bg-zinc-700'}`}>
-              <motion.div
-                animate={{ x: form.saveAsCustomFood ? 16 : 0 }}
-                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                className={`w-5 h-5 rounded-full shadow-sm ${form.saveAsCustomFood ? 'bg-black' : 'bg-zinc-400'}`}
-              />
-            </div>
-          </button>
-        </motion.div>
 
         {/* ── Kaydet butonu ─────────────────────────────────────────── */}
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.3 }}>

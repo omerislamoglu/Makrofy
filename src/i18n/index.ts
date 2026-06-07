@@ -30,38 +30,94 @@ const LOCALE_OVERRIDE_KEY = 'makrofy_locale_override'
 // App Store Connect fiyatlarıyla birebir eşleşen sabit değerler.
 // RevenueCat paketleri yüklendiğinde bunlar yerine gerçek fiyatlar gösterilir.
 interface CurrencyPricing {
-  symbol: string
+  currencyCode: string
   monthly: number
   quarterly: number
   yearly: number
 }
 
 const CURRENCY_MAP: Record<string, CurrencyPricing> = {
-  // Türkiye — App Store Connect fiyatları
-  tr: { symbol: '₺', monthly: 149.99, quarterly: 349.99, yearly: 999.99 },
-  // AB ülkeleri
-  de: { symbol: '€', monthly: 4.99, quarterly: 11.99, yearly: 29.99 },
-  fr: { symbol: '€', monthly: 4.99, quarterly: 11.99, yearly: 29.99 },
-  it: { symbol: '€', monthly: 4.99, quarterly: 11.99, yearly: 29.99 },
-  es: { symbol: '€', monthly: 4.99, quarterly: 11.99, yearly: 29.99 },
-  nl: { symbol: '€', monthly: 4.99, quarterly: 11.99, yearly: 29.99 },
-  pt: { symbol: '€', monthly: 4.99, quarterly: 11.99, yearly: 29.99 },
-  pl: { symbol: '€', monthly: 4.99, quarterly: 11.99, yearly: 29.99 },
-  ro: { symbol: '€', monthly: 4.99, quarterly: 11.99, yearly: 29.99 },
-  el: { symbol: '€', monthly: 4.99, quarterly: 11.99, yearly: 29.99 },
-  // İngiltere
-  'en-gb': { symbol: '£', monthly: 3.99, quarterly: 9.99, yearly: 24.99 },
-  // Diğer / ABD
-  default: { symbol: '$', monthly: 4.99, quarterly: 11.99, yearly: 29.99 },
+  TR: { currencyCode: 'TRY', monthly: 149.99, quarterly: 349.99, yearly: 999.99 },
+  US: { currencyCode: 'USD', monthly: 4.99, quarterly: 11.99, yearly: 29.99 },
+  CA: { currencyCode: 'CAD', monthly: 6.99, quarterly: 16.99, yearly: 39.99 },
+  GB: { currencyCode: 'GBP', monthly: 3.99, quarterly: 9.99, yearly: 24.99 },
+  AU: { currencyCode: 'AUD', monthly: 7.99, quarterly: 19.99, yearly: 49.99 },
+  NZ: { currencyCode: 'NZD', monthly: 8.99, quarterly: 21.99, yearly: 54.99 },
+  CH: { currencyCode: 'CHF', monthly: 4.99, quarterly: 11.99, yearly: 29.99 },
+  SE: { currencyCode: 'SEK', monthly: 59, quarterly: 149, yearly: 349 },
+  NO: { currencyCode: 'NOK', monthly: 59, quarterly: 149, yearly: 349 },
+  DK: { currencyCode: 'DKK', monthly: 39, quarterly: 99, yearly: 249 },
+  PL: { currencyCode: 'PLN', monthly: 24.99, quarterly: 59.99, yearly: 149.99 },
+  CZ: { currencyCode: 'CZK', monthly: 129, quarterly: 299, yearly: 749 },
+  HU: { currencyCode: 'HUF', monthly: 1990, quarterly: 4990, yearly: 11990 },
+  RO: { currencyCode: 'RON', monthly: 24.99, quarterly: 59.99, yearly: 149.99 },
+  BG: { currencyCode: 'BGN', monthly: 9.99, quarterly: 23.99, yearly: 59.99 },
+  JP: { currencyCode: 'JPY', monthly: 700, quarterly: 1700, yearly: 4200 },
+  KR: { currencyCode: 'KRW', monthly: 6900, quarterly: 16900, yearly: 39900 },
+  IN: { currencyCode: 'INR', monthly: 399, quarterly: 999, yearly: 2499 },
+  BR: { currencyCode: 'BRL', monthly: 24.90, quarterly: 59.90, yearly: 149.90 },
+  MX: { currencyCode: 'MXN', monthly: 99, quarterly: 249, yearly: 599 },
+  ZA: { currencyCode: 'ZAR', monthly: 89.99, quarterly: 219.99, yearly: 549.99 },
+  SG: { currencyCode: 'SGD', monthly: 6.98, quarterly: 16.98, yearly: 39.98 },
+  HK: { currencyCode: 'HKD', monthly: 38, quarterly: 98, yearly: 238 },
+  AE: { currencyCode: 'AED', monthly: 19.99, quarterly: 49.99, yearly: 119.99 },
+  SA: { currencyCode: 'SAR', monthly: 19.99, quarterly: 49.99, yearly: 119.99 },
+  IL: { currencyCode: 'ILS', monthly: 17.90, quarterly: 44.90, yearly: 109.90 },
+  UA: { currencyCode: 'UAH', monthly: 199, quarterly: 499, yearly: 1199 },
+  default: { currencyCode: 'USD', monthly: 4.99, quarterly: 11.99, yearly: 29.99 },
+}
+
+const EURO_REGIONS = new Set([
+  'AT', 'BE', 'CY', 'DE', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR', 'IE', 'IT',
+  'LT', 'LU', 'LV', 'MT', 'NL', 'PT', 'SI', 'SK',
+])
+
+const LANGUAGE_TO_REGION: Record<string, string> = {
+  tr: 'TR',
+  en: 'US',
+  de: 'DE',
+  fr: 'FR',
+  it: 'IT',
+  es: 'ES',
+  nl: 'NL',
+  pt: 'PT',
+  pl: 'PL',
+  ro: 'RO',
+  el: 'GR',
+  sv: 'SE',
+  no: 'NO',
+  nb: 'NO',
+  da: 'DK',
+  cs: 'CZ',
+  hu: 'HU',
+  bg: 'BG',
+  ja: 'JP',
+  ko: 'KR',
+  hi: 'IN',
+  pt_br: 'BR',
+}
+
+function getRegionFromLocale(rawLocale: string): string {
+  const normalized = rawLocale.replace('_', '-')
+  try {
+    const parsed = new Intl.Locale(normalized)
+    if (parsed.region) return parsed.region.toUpperCase()
+    const language = parsed.language.toLowerCase()
+    return LANGUAGE_TO_REGION[language] ?? 'US'
+  } catch {
+    const parts = normalized.split('-')
+    if (parts[1]) return parts[1].toUpperCase()
+    return LANGUAGE_TO_REGION[parts[0]?.toLowerCase() ?? ''] ?? 'US'
+  }
 }
 
 export function detectCurrencyInfo(rawLocale: string): CurrencyPricing {
-  const lower = rawLocale.toLowerCase()
-  // Tam eşleşme önce (örn. en-GB)
-  if (CURRENCY_MAP[lower]) return CURRENCY_MAP[lower]
-  // Dil kodu eşleşmesi (örn. "de-AT" → "de")
-  const lang = lower.split('-')[0]
-  return CURRENCY_MAP[lang] ?? CURRENCY_MAP['default']
+  const region = getRegionFromLocale(rawLocale)
+  if (CURRENCY_MAP[region]) return CURRENCY_MAP[region]
+  if (EURO_REGIONS.has(region)) {
+    return { currencyCode: 'EUR', monthly: 4.99, quarterly: 11.99, yearly: 29.99 }
+  }
+  return CURRENCY_MAP.default
 }
 
 // ─── Locale tespiti ──────────────────────────────────────────────────────────
@@ -89,24 +145,29 @@ export function getLocaleOverride(): AppLocale | null {
 }
 
 // ─── Locale config oluştur ───────────────────────────────────────────────────
-function formatPrice(symbol: string, amount: number, locale: AppLocale): string {
+export function formatCurrencyAmount(
+  amount: number,
+  currencyCode: string,
+  rawLocale = navigator.language || 'en-US'
+): string {
   const isInt = Number.isInteger(amount)
-  const nf = new Intl.NumberFormat(locale === 'tr' ? 'tr-TR' : 'en-US', {
+  return new Intl.NumberFormat(rawLocale, {
+    style: 'currency',
+    currency: currencyCode,
     minimumFractionDigits: isInt ? 0 : 2,
     maximumFractionDigits: 2,
-  })
-  return `${symbol}${nf.format(amount)}`
+  }).format(amount)
 }
 
 export function buildLocaleConfig(locale: AppLocale): LocaleConfig {
   const rawLocale = navigator.language || 'en'
   const pricing = detectCurrencyInfo(rawLocale)
-  const { symbol, monthly, quarterly, yearly } = pricing
+  const { currencyCode, monthly, quarterly, yearly } = pricing
 
   const strings = locale === 'tr' ? tr : en
   const isTr = locale === 'tr'
 
-  const fmt = (n: number) => formatPrice(symbol, n, locale)
+  const fmt = (n: number) => formatCurrencyAmount(n, currencyCode, rawLocale)
 
   // İndirim oranlarını App Store Connect fiyatlarından hesapla
   const quarterlyPerMonth = quarterly / 3
@@ -117,7 +178,7 @@ export function buildLocaleConfig(locale: AppLocale): LocaleConfig {
 
   return {
     locale,
-    currency: symbol,
+    currency: currencyCode,
     proPrice: fmt(monthly),
     proPeriod: isTr ? 'aylık' : '/month',
     plans: {

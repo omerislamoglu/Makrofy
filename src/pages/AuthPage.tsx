@@ -175,7 +175,7 @@ export default function AuthPage() {
               className="space-y-3"
             >
               {/* Apple */}
-              <button
+              <button type="button"
                 onClick={handleApple}
                 disabled={loading}
                 className="w-full h-[52px] rounded-2xl bg-white text-black font-semibold text-[15px]
@@ -188,7 +188,7 @@ export default function AuthPage() {
               </button>
 
               {/* Google */}
-              <button
+              <button type="button"
                 onClick={handleGoogle}
                 disabled={loading}
                 className="w-full h-[52px] rounded-2xl bg-zinc-900 text-white font-semibold text-[15px]
@@ -209,7 +209,7 @@ export default function AuthPage() {
               </div>
 
               {/* Email */}
-              <button
+              <button type="button"
                 onClick={() => { clearError(); setMode('email-login') }}
                 disabled={loading}
                 className="w-full h-[52px] rounded-2xl bg-zinc-900 text-white font-semibold text-[15px]
@@ -239,7 +239,7 @@ export default function AuthPage() {
               exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.25 }}
             >
-              <button
+              <button type="button"
                 onClick={goBack}
                 className="flex items-center gap-1.5 text-zinc-400 text-sm mb-6 hover:text-white transition-colors"
               >
@@ -286,13 +286,13 @@ export default function AuthPage() {
               </form>
 
               <div className="flex items-center justify-between mt-5">
-                <button
+                <button type="button"
                   onClick={() => { clearError(); setMode('reset-password') }}
                   className="text-zinc-500 text-sm hover:text-white transition-colors"
                 >
                   {a.forgotPassword}
                 </button>
-                <button
+                <button type="button"
                   onClick={() => { clearError(); setMode('email-signup') }}
                   className="text-white text-sm font-medium underline underline-offset-4"
                 >
@@ -313,7 +313,7 @@ export default function AuthPage() {
               exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.25 }}
             >
-              <button
+              <button type="button"
                 onClick={goBack}
                 className="flex items-center gap-1.5 text-zinc-400 text-sm mb-6 hover:text-white transition-colors"
               >
@@ -361,7 +361,7 @@ export default function AuthPage() {
 
               <p className="text-center mt-5 text-sm text-zinc-500">
                 {a.alreadyHaveAccount}{' '}
-                <button
+                <button type="button"
                   onClick={() => { clearError(); setMode('email-login') }}
                   className="text-white underline underline-offset-4"
                 >
@@ -382,7 +382,7 @@ export default function AuthPage() {
               exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.25 }}
             >
-              <button
+              <button type="button"
                 onClick={goBack}
                 className="flex items-center gap-1.5 text-zinc-400 text-sm mb-6 hover:text-white transition-colors"
               >
@@ -452,8 +452,8 @@ export default function AuthPage() {
           className="text-center text-[11px] text-zinc-700 mt-10 leading-relaxed"
         >
           {a.footerTerms}{' '}
-          <span className="text-zinc-500">{a.footerTermsLink}</span> {a.footerAnd}{' '}
-          <span className="text-zinc-500">{a.footerPrivacyLink}</span>{a.footerAccept}
+          <a href="https://makrofy.app/terms" target="_blank" rel="noopener noreferrer" className="text-zinc-500 underline">{a.footerTermsLink}</a> {a.footerAnd}{' '}
+          <a href="https://makrofy.app/privacy" target="_blank" rel="noopener noreferrer" className="text-zinc-500 underline">{a.footerPrivacyLink}</a>{a.footerAccept}
         </motion.p>
       </motion.div>
     </div>

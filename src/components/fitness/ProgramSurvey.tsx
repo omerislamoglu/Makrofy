@@ -46,7 +46,8 @@ function getQuestions(locale: string): Question[] {
           { label: '2 days', value: 2 },
           { label: '3 days', value: 3 },
           { label: '4 days', value: 4 },
-          { label: '5+ days', value: 5 },
+          { label: '5 days', value: 5 },
+          { label: '6 days', value: 6, desc: 'Advanced only' },
         ],
       },
       {
@@ -62,20 +63,52 @@ function getQuestions(locale: string): Question[] {
         key: 'minutes',
         title: 'How much time do you have per session?',
         options: [
-          { label: '30 minutes', value: 30 },
+          { label: '30 minutes', value: 30, desc: 'Quick & effective' },
           { label: '45 minutes', value: 45 },
-          { label: '60+ minutes', value: 60 },
+          { label: '60 minutes', value: 60 },
+          { label: '90 minutes', value: 90, desc: 'Full session with extras' },
+        ],
+      },
+      {
+        key: 'focus',
+        title: 'Which area do you want to emphasize?',
+        subtitle: 'This adjusts volume distribution across body parts.',
+        options: [
+          { label: 'Balanced', value: 'balanced', desc: 'Even upper/lower split' },
+          { label: 'Upper body', value: 'upper', desc: 'More chest, back, arms' },
+          { label: 'Lower body', value: 'lower', desc: 'More legs, glutes' },
+        ],
+      },
+      {
+        key: 'intensity',
+        title: 'How intense should the sessions be?',
+        subtitle: 'This affects rest times, rep ranges, and tempo.',
+        options: [
+          { label: 'Moderate', value: 'moderate', desc: 'Comfortable — good for beginners' },
+          { label: 'High', value: 'high', desc: 'Standard for most lifters' },
+          { label: 'Maximum', value: 'max', desc: 'Very demanding — advanced only' },
+        ],
+      },
+      {
+        key: 'cardio',
+        title: 'What kind of cardio do you prefer?',
+        options: [
+          { label: 'None', value: 'none', desc: 'Strength only' },
+          { label: 'Light (LISS)', value: 'light', desc: 'Walking, cycling, elliptical' },
+          { label: 'HIIT', value: 'hiit', desc: 'Intervals, sprints, circuits' },
         ],
       },
       {
         key: 'injury',
-        title: 'Do you have any injuries I should be aware of?',
+        title: 'Any injuries I should be aware of?',
         subtitle: "I'll choose safe movements accordingly.",
         options: [
           { label: 'None', value: 'none' },
           { label: 'Knee', value: 'knee' },
           { label: 'Lower back', value: 'back' },
           { label: 'Shoulder', value: 'shoulder' },
+          { label: 'Wrist', value: 'wrist' },
+          { label: 'Hip', value: 'hip' },
         ],
       },
     ]
@@ -107,7 +140,8 @@ function getQuestions(locale: string): Question[] {
         { label: '2 gün', value: 2 },
         { label: '3 gün', value: 3 },
         { label: '4 gün', value: 4 },
-        { label: '5+ gün', value: 5 },
+        { label: '5 gün', value: 5 },
+        { label: '6 gün', value: 6, desc: 'Sadece ileri seviye' },
       ],
     },
     {
@@ -123,9 +157,39 @@ function getQuestions(locale: string): Question[] {
       key: 'minutes',
       title: 'Seans başına ne kadar vaktin var?',
       options: [
-        { label: '30 dakika', value: 30 },
+        { label: '30 dakika', value: 30, desc: 'Hızlı & etkili' },
         { label: '45 dakika', value: 45 },
-        { label: '60+ dakika', value: 60 },
+        { label: '60 dakika', value: 60 },
+        { label: '90 dakika', value: 90, desc: 'Detaylı tam seans' },
+      ],
+    },
+    {
+      key: 'focus',
+      title: 'Hangi bölgeyi öne çıkarmak istersin?',
+      subtitle: 'Vücut bölgelerine göre hacim dağılımını ayarlar.',
+      options: [
+        { label: 'Dengeli', value: 'balanced', desc: 'Eşit üst/alt dağılım' },
+        { label: 'Üst vücut', value: 'upper', desc: 'Daha fazla göğüs, sırt, kol' },
+        { label: 'Alt vücut', value: 'lower', desc: 'Daha fazla bacak, kalça' },
+      ],
+    },
+    {
+      key: 'intensity',
+      title: 'Antrenman yoğunluğu nasıl olsun?',
+      subtitle: 'Dinlenme, tekrar aralığı ve tempoyu etkiler.',
+      options: [
+        { label: 'Orta', value: 'moderate', desc: 'Rahat — başlangıç için ideal' },
+        { label: 'Yüksek', value: 'high', desc: 'Çoğu sporcu için standart' },
+        { label: 'Maksimum', value: 'max', desc: 'Çok ağır — ileri seviye' },
+      ],
+    },
+    {
+      key: 'cardio',
+      title: 'Kardiyo tercihin ne?',
+      options: [
+        { label: 'İstemiyorum', value: 'none', desc: 'Sadece kuvvet' },
+        { label: 'Hafif (LISS)', value: 'light', desc: 'Yürüyüş, bisiklet, eliptik' },
+        { label: 'HIIT', value: 'hiit', desc: 'İnterval, sprint, devre' },
       ],
     },
     {
@@ -137,6 +201,8 @@ function getQuestions(locale: string): Question[] {
         { label: 'Diz', value: 'knee' },
         { label: 'Bel', value: 'back' },
         { label: 'Omuz', value: 'shoulder' },
+        { label: 'Bilek', value: 'wrist' },
+        { label: 'Kalça', value: 'hip' },
       ],
     },
   ]
@@ -181,7 +247,7 @@ export default function ProgramSurvey({
       {/* Header */}
       <div className="px-4 pt-4 pb-3 flex items-center gap-2.5 border-b border-zinc-800/40">
         {step >= 0 ? (
-          <button onClick={back} className="w-8 h-8 rounded-xl bg-zinc-800 flex items-center justify-center flex-shrink-0">
+          <button type="button" onClick={back} className="w-8 h-8 rounded-xl bg-zinc-800 flex items-center justify-center flex-shrink-0">
             <ChevronLeft size={16} className="text-zinc-300" />
           </button>
         ) : (
@@ -201,7 +267,7 @@ export default function ProgramSurvey({
                   : `Adım ${step + 1} / ${QUESTIONS.length}`)}
           </p>
         </div>
-        <button onClick={onCancel} className="text-[11px] text-zinc-500 px-2 py-1">
+        <button type="button" onClick={onCancel} className="text-[11px] text-zinc-500 px-2 py-1">
           {isEN ? 'Close' : 'Kapat'}
         </button>
       </div>
@@ -237,7 +303,7 @@ export default function ProgramSurvey({
                   : <>Gerçek bir antrenör gibi birkaç soru sorup sana <span className="text-zinc-200 font-medium">tamamen özel</span> bir program hazırlayabilirim. Acelen varsa hazır programlardan da seçebilirsin.</>
                 }
               </p>
-              <button
+              <button type="button"
                 onClick={() => { haptics.impactLight(); setStep(0) }}
                 className="w-full bg-white text-black rounded-2xl p-4 flex items-center gap-3 active:scale-[0.99] transition-transform"
               >
@@ -249,12 +315,12 @@ export default function ProgramSurvey({
                     {isEN ? 'Build mine' : 'Bana özel hazırla'}
                   </p>
                   <p className="text-[11px] text-zinc-600">
-                    {isEN ? '6-question survey · custom program' : '6 soruluk anket · kişiye özel program'}
+                    {isEN ? `${QUESTIONS.length}-question survey · custom program` : `${QUESTIONS.length} soruluk anket · kişiye özel program`}
                   </p>
                 </div>
                 <ArrowRight size={16} className="text-zinc-500" />
               </button>
-              <button
+              <button type="button"
                 onClick={() => { haptics.impactLight(); onPickReady() }}
                 className="w-full bg-zinc-800 border border-zinc-700/50 rounded-2xl p-4 flex items-center gap-3 active:scale-[0.99] transition-transform"
               >
@@ -288,7 +354,7 @@ export default function ProgramSurvey({
                 {QUESTIONS[step].options.map((opt) => {
                   const selected = answers[QUESTIONS[step].key] === opt.value
                   return (
-                    <button
+                    <button type="button"
                       key={String(opt.value)}
                       onClick={() => select(QUESTIONS[step], opt.value)}
                       className={`w-full rounded-xl p-3.5 flex items-center gap-3 border text-left transition-all active:scale-[0.99]

@@ -12,9 +12,12 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth'
 import { Capacitor } from '@capacitor/core'
-import { auth, isDemoMode } from './firebase'
+import { getFunctions, httpsCallable } from 'firebase/functions'
+import { app, auth, isDemoMode } from './firebase'
 import { UserProfile, DailyGoal } from '../types/user'
 import { logOutRevenueCat } from './revenueCatService'
+
+const FUNCTIONS_REGION = import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || 'us-central1'
 
 const STORAGE_KEY_PREFIX = 'makrofy_user_'
 
@@ -127,16 +130,86 @@ export async function signOut() {
   return firebaseSignOut(auth)
 }
 
+function removeLocalUserProfile(userId: string): void {
+  localStorage.removeItem(STORAGE_KEY_PREFIX + userId)
+}
+
+function getCFEndpoint(fnName: string): string {
+  const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID
+  const region = import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || 'us-central1'
+  return `https://${region}-${projectId}.cloudfunctions.net/${fnName}`
+}
+
+async function callDeleteAccountNative(): Promise<void> {
+  const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication')
+  const { token } = await FirebaseAuthentication.getIdToken({ forceRefresh: false })
+  if (!token) throw new Error('No auth token available')
+
+  const response = await fetch(getCFEndpoint('deleteAccount'), {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ data: {} }),
+  })
+
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(`Account deletion failed: ${response.status} ${body.substring(0, 200)}`)
+  }
+}
+
+export async function deleteAccount(userId: string): Promise<void> {
+  if (isDemoMode) {
+    removeLocalUserProfile(userId)
+    return
+  }
+
+  if (Capacitor.isNativePlatform()) {
+    await callDeleteAccountNative()
+  } else {
+    const fn = httpsCallable<void, { success: boolean }>(
+      getFunctions(app, FUNCTIONS_REGION),
+      'deleteAccount'
+    )
+    await fn()
+  }
+
+  removeLocalUserProfile(userId)
+
+  try {
+    await logOutRevenueCat()
+  } catch {
+    // best effort after account deletion
+  }
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication')
+      await FirebaseAuthentication.signOut()
+    } catch {
+      // best effort after server-side auth user deletion
+    }
+  }
+
+  try {
+    await firebaseSignOut(auth)
+  } catch {
+    // The auth user may already be deleted server-side.
+  }
+}
+
 export async function updateUserDisplayName(displayName: string) {
   if (!auth.currentUser) return
   return updateProfile(auth.currentUser, { displayName })
 }
 
 export function getUserProfile(firebaseUser: FirebaseUser): UserProfile {
-  let extra: Record<string, any> = {}
+  let extra: Partial<UserProfile> = {}
   try {
     const stored = localStorage.getItem(STORAGE_KEY_PREFIX + firebaseUser.uid)
-    extra = stored ? JSON.parse(stored) : {}
+    extra = stored ? (JSON.parse(stored) as Partial<UserProfile>) : {}
   } catch (e) {
     console.warn('[getUserProfile] localStorage read failed:', e)
   }
@@ -158,6 +231,8 @@ export function getUserProfile(firebaseUser: FirebaseUser): UserProfile {
     hasExistingPlan: extra.hasExistingPlan ?? undefined,
     preferredUnits: extra.preferredUnits ?? 'metric',
     mealReminders: extra.mealReminders ?? false,
+    weeklySummary: extra.weeklySummary ?? true,
+    promoNotifs: extra.promoNotifs ?? false,
     dateKey: extra.dateKey ?? today,
     bodyMetrics: extra.bodyMetrics ?? undefined,
   }

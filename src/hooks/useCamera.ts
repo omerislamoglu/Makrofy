@@ -3,15 +3,22 @@
  *
  * Native platformda Capacitor Camera API kullanır (iOS kamera + galeri).
  * Web'de fallback olarak HTML file input kullanır.
+ *
+ * Memory fix: resultType CameraResultType.Uri kullanılır.
+ * Tam çözünürlüklü base64 JS memory'ye asla yüklenmez.
+ * Preview için Capacitor.convertFileSrc(webPath) kullanılır.
  */
 
 import { useCallback, useRef } from 'react'
 import { Capacitor } from '@capacitor/core'
 
-interface CameraResult {
-  dataUrl: string // base64 data URL (preview icin)
-  webPath?: string // web-accessible path (Capacitor)
-  file?: File // File nesnesi (web fallback)
+export interface CameraResult {
+  /** Küçük URL — yalnızca UI preview için (objectURL veya convertFileSrc). */
+  previewUrl: string
+  /** Capacitor native webPath — fetch() ile blob almak için. */
+  webPath?: string
+  /** Web fallback: orijinal File nesnesi. */
+  file?: File
 }
 
 const isNative = Capacitor.isNativePlatform()
@@ -21,8 +28,8 @@ export function useCamera() {
 
   /**
    * Kamera ile fotoğraf çek.
-   * Native: Capacitor Camera.getPhoto()
-   * Web: file input ile capture="environment"
+   * Native: CameraResultType.Uri — büyük base64 JS'e yüklenmez.
+   * Web: file input ile capture="environment" + objectURL.
    */
   const takePhoto = useCallback(async (): Promise<CameraResult | null> => {
     if (isNative) {
@@ -31,48 +38,52 @@ export function useCamera() {
           '@capacitor/camera'
         )
         const photo = await Camera.getPhoto({
-          quality: 85,
+          quality: 80,
           allowEditing: false,
-          resultType: CameraResultType.DataUrl,
+          resultType: CameraResultType.Uri,
           source: CameraSource.Camera,
-          width: 1920,
-          height: 1920,
           correctOrientation: true,
           presentationStyle: 'fullscreen',
         })
 
-        if (!photo.dataUrl) return null
+        if (!photo.webPath) return null
 
-        return {
-          dataUrl: photo.dataUrl,
-          webPath: photo.webPath,
+        // photo.webPath is already "capacitor://localhost/_capacitor_file_/..." — use directly.
+        // Capacitor.convertFileSrc is for native file:// paths, not for webPath.
+        const previewUrl = photo.webPath
+        if (import.meta.env.DEV) {
+          console.debug('[useCamera] takePhoto native', {
+            resultType: 'Uri',
+            webPath: photo.webPath,
+            previewUrl,
+          })
         }
+        return { previewUrl, webPath: photo.webPath }
       } catch (err: unknown) {
-        // Kullanıcı iptal ettiyse null dön
         const msg = err instanceof Error ? err.message : String(err)
-        if (msg.includes('cancel') || msg.includes('Cancel') || msg.includes('User cancelled')) {
+        if (
+          msg.includes('cancel') ||
+          msg.includes('Cancel') ||
+          msg.includes('User cancelled')
+        ) {
           return null
         }
         throw err
       }
     }
 
-    // Web fallback: file input
+    // Web fallback: file input + objectURL (base64 yok)
     return new Promise((resolve) => {
       const input = document.createElement('input')
       input.type = 'file'
       input.accept = 'image/*'
       input.capture = 'environment'
-      input.onchange = async () => {
+      input.onchange = () => {
         const file = input.files?.[0]
-        if (!file) {
-          resolve(null)
-          return
-        }
-        const dataUrl = await fileToDataUrl(file)
-        resolve({ dataUrl, file })
+        if (!file) { resolve(null); return }
+        const previewUrl = URL.createObjectURL(file)
+        resolve({ previewUrl, file })
       }
-      // Kullanıcı iptal ederse
       input.oncancel = () => resolve(null)
       input.click()
     })
@@ -80,8 +91,8 @@ export function useCamera() {
 
   /**
    * Galeriden fotoğraf seç.
-   * Native: Capacitor Camera.getPhoto() with Photos source
-   * Web: file input (capture olmadan)
+   * Native: CameraResultType.Uri — büyük base64 JS'e yüklenmez.
+   * Web: file input + objectURL.
    */
   const pickFromGallery = useCallback(async (): Promise<CameraResult | null> => {
     if (isNative) {
@@ -90,25 +101,32 @@ export function useCamera() {
           '@capacitor/camera'
         )
         const photo = await Camera.getPhoto({
-          quality: 85,
+          quality: 80,
           allowEditing: false,
-          resultType: CameraResultType.DataUrl,
+          resultType: CameraResultType.Uri,
           source: CameraSource.Photos,
-          width: 1920,
-          height: 1920,
           correctOrientation: true,
           presentationStyle: 'popover',
         })
 
-        if (!photo.dataUrl) return null
+        if (!photo.webPath) return null
 
-        return {
-          dataUrl: photo.dataUrl,
-          webPath: photo.webPath,
+        const previewUrl = photo.webPath
+        if (import.meta.env.DEV) {
+          console.debug('[useCamera] pickFromGallery native', {
+            resultType: 'Uri',
+            webPath: photo.webPath,
+            previewUrl,
+          })
         }
+        return { previewUrl, webPath: photo.webPath }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
-        if (msg.includes('cancel') || msg.includes('Cancel') || msg.includes('User cancelled')) {
+        if (
+          msg.includes('cancel') ||
+          msg.includes('Cancel') ||
+          msg.includes('User cancelled')
+        ) {
           return null
         }
         throw err
@@ -120,14 +138,11 @@ export function useCamera() {
       const input = document.createElement('input')
       input.type = 'file'
       input.accept = 'image/*'
-      input.onchange = async () => {
+      input.onchange = () => {
         const file = input.files?.[0]
-        if (!file) {
-          resolve(null)
-          return
-        }
-        const dataUrl = await fileToDataUrl(file)
-        resolve({ dataUrl, file })
+        if (!file) { resolve(null); return }
+        const previewUrl = URL.createObjectURL(file)
+        resolve({ previewUrl, file })
       }
       input.oncancel = () => resolve(null)
       input.click()
@@ -140,16 +155,3 @@ export function useCamera() {
     fileInputRef,
   }
 }
-
-// ── Yardımcı ──────────────────────────────────────────────────────────────
-
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = (e) => resolve(e.target?.result as string)
-    reader.onerror = () => reject(new Error('Dosya okunamadı'))
-    reader.readAsDataURL(file)
-  })
-}
-
-export type { CameraResult }

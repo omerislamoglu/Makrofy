@@ -24,7 +24,7 @@ export default function FoodEntryForm({
           Item {index + 1}
         </span>
         {canRemove && (
-          <button
+          <button type="button"
             onClick={() => onRemove(index)}
             className="p-1 rounded-lg hover:bg-zinc-800"
           >
