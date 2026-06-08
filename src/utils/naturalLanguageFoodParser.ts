@@ -728,7 +728,8 @@ function detectMealTypeFromText(text: string): MealType | null {
 
 export function parseNaturalLanguageInput(
   text: string,
-  catalog: FoodCatalogItem[]
+  catalog: FoodCatalogItem[],
+  locale?: 'tr' | 'en'
 ): ParseResult {
   if (!text.trim()) {
     return {
@@ -776,8 +777,9 @@ export function parseNaturalLanguageInput(
   // Check for nonsense input: all segments failed to match
   const allFailed = items.length > 0 && items.every(i => i.match === null)
   const noItems = items.length === 0 && unparsedParts.length > 0
-  const inputText = normalizeFoodText(text)
   const looksLikeNonsense = isNonsenseInput(text)
+
+  const isEN = locale === 'en'
 
   if ((allFailed || noItems) && looksLikeNonsense) {
     return {
@@ -786,9 +788,9 @@ export function parseNaturalLanguageInput(
       suggestedMealType,
       unparsedText: unparsedParts.join(', '),
       hasNonsenseInput: true,
-      nonsenseMessage: inputText.match(/^[a-z]/)
-        ? 'Bu bir yemek gibi görünmüyor. Lütfen yemek adı girin (örn. "2 yumurta, 1 dilim ekmek").'
-        : "This doesn't look like food. Please enter a food name (e.g. \"2 eggs, 1 slice bread\").",
+      nonsenseMessage: isEN
+        ? "This doesn't look like food. Please enter a food name (e.g. \"2 eggs, 1 slice bread\")."
+        : 'Bu bir yemek gibi görünmüyor. Lütfen yemek adı girin (örn. "2 yumurta, 1 dilim ekmek").',
     }
   }
 
@@ -801,7 +803,9 @@ export function parseNaturalLanguageInput(
       suggestedMealType,
       unparsedText: unparsedParts.join(', '),
       hasNonsenseInput: false,
-      nonsenseMessage: 'Eşleşen yemek bulunamadı. Farklı bir isim deneyin.',
+      nonsenseMessage: isEN
+        ? 'No matching food found. Try a different name.'
+        : 'Eşleşen yemek bulunamadı. Farklı bir isim deneyin.',
     }
   }
 

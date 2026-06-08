@@ -101,6 +101,8 @@ export interface AnalyzeMealRequest {
   mealTypeHint?: MealType;
   gramNotes?: string;
   dateKey?: string;
+  /** User locale — 'en' or 'tr'. Defaults to 'tr' for backward compat */
+  locale?: string;
 }
 
 export interface AnalyzeMealResponse {

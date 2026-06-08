@@ -1628,7 +1628,7 @@ function TextEntryTab({
       return
     }
     debounceRef.current = setTimeout(() => {
-      const result = parseNaturalLanguageInput(inputText, catalog)
+      const result = parseNaturalLanguageInput(inputText, catalog, locale)
       setItems(result.items)
       const nextClarifyIndex = result.items.findIndex(itemNeedsTextClarification)
       setClarifyIndex(nextClarifyIndex >= 0 ? nextClarifyIndex : null)
@@ -1643,7 +1643,7 @@ function TextEntryTab({
       }
     }, 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [inputText, catalog, onMealTypeChange])
+  }, [inputText, catalog, locale, onMealTypeChange])
 
   const totalMacros = useMemo(() => sumMacros(items.map(i => i.macros)), [items])
   const hasItems = items.length > 0
@@ -2141,7 +2141,7 @@ export default function AddMealPage() {
       const file = new File([compressed.blob], 'scan.jpg', { type: 'image/jpeg' })
 
       // 3) AI analizi
-      const result = await analyzeMealImage(file, { gramNotes })
+      const result = await analyzeMealImage(file, { gramNotes, locale })
       consumeScan()
       haptics.notificationSuccess()
 

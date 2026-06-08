@@ -93,7 +93,7 @@ type AnalyzeMealFunctionResponse = {
  */
 export async function analyzeMealImage(
   file: File,
-  options: { mealTypeHint?: MealType; gramNotes?: string } = {}
+  options: { mealTypeHint?: MealType; gramNotes?: string; locale?: string } = {}
 ): Promise<AIScanResult> {
   validateImageFile(file)
 
@@ -126,7 +126,7 @@ export async function analyzeMealImage(
 
     const imageUrl = await getDownloadURL(imageRef)
     const analyze = httpsCallable<
-      { imageUrl: string; mealTypeHint?: MealType; gramNotes?: string; dateKey?: string },
+      { imageUrl: string; mealTypeHint?: MealType; gramNotes?: string; dateKey?: string; locale?: string },
       AnalyzeMealFunctionResponse
     >(getFunctions(app, FUNCTIONS_REGION), 'analyzeMealImage')
 
@@ -135,6 +135,7 @@ export async function analyzeMealImage(
       dateKey: getToday(),
       ...(options.mealTypeHint && { mealTypeHint: options.mealTypeHint }),
       ...(options.gramNotes?.trim() && { gramNotes: options.gramNotes.trim() }),
+      ...(options.locale && { locale: options.locale }),
     })
 
     return mapFunctionAnalysis(response.data)
@@ -173,7 +174,7 @@ export async function analyzeMealImage(
 
 async function analyzeNativeWithIdToken(
   file: File,
-  options: { mealTypeHint?: MealType; gramNotes?: string }
+  options: { mealTypeHint?: MealType; gramNotes?: string; locale?: string }
 ): Promise<AIScanResult> {
   if (DEBUG_SCAN) console.log('[AI_SCAN] native path started', { fileName: file.name, fileSize: file.size, fileType: file.type })
 
@@ -206,6 +207,7 @@ async function analyzeNativeWithIdToken(
       dateKey: getToday(),
       ...(options.mealTypeHint && { mealTypeHint: options.mealTypeHint }),
       ...(options.gramNotes?.trim() && { gramNotes: options.gramNotes.trim() }),
+      ...(options.locale && { locale: options.locale }),
     },
   }
 

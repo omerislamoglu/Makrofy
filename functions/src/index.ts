@@ -347,6 +347,7 @@ export const analyzeMealImage = onCall<AnalyzeMealRequest>(
 
     // ── 2. Validate request payload ────────────────────────────────────
     const { imageUrl, mealTypeHint, gramNotes } = validateRequest(request.data);
+    const locale = (request.data as { locale?: string }).locale || 'tr';
 
     // ── 3. Enforce subscription scan quota before calling AI ───────────
     const quota = await reserveAiScanQuota(userId);
@@ -355,7 +356,7 @@ export const analyzeMealImage = onCall<AnalyzeMealRequest>(
     // Meal is NOT saved here. The client saves only when the user taps Save.
     let analysis: Awaited<ReturnType<typeof analyzeWithAI>>;
     try {
-      analysis = await analyzeWithAI(imageUrl, mealTypeHint, gramNotes);
+      analysis = await analyzeWithAI(imageUrl, mealTypeHint, gramNotes, locale);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const lowerMessage = message.toLowerCase();

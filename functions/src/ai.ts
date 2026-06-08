@@ -37,13 +37,14 @@ const MODEL_VERSION_MAP: Record<string, string> = {
 export async function analyzeWithAI(
   imageUrl: string,
   mealTypeHint?: MealType,
-  gramNotes?: string
+  gramNotes?: string,
+  locale?: string
 ): Promise<AIAnalysisResult> {
   if (USE_MOCK) {
     return mockAnalysis(mealTypeHint);
   }
 
-  return realAnalysis(imageUrl, mealTypeHint, gramNotes);
+  return realAnalysis(imageUrl, mealTypeHint, gramNotes, locale);
 }
 
 // Re-export the secret so index.ts can declare it in runWith().
@@ -54,7 +55,8 @@ export { aiApiKey };
 async function realAnalysis(
   imageUrl: string,
   mealTypeHint?: MealType,
-  gramNotes?: string
+  gramNotes?: string,
+  locale?: string
 ): Promise<AIAnalysisResult> {
   const provider = process.env.AI_PROVIDER ?? "openai";
 
@@ -76,7 +78,7 @@ async function realAnalysis(
     );
   }
 
-  const systemPrompt = buildSystemPrompt();
+  const systemPrompt = buildSystemPrompt(locale);
   const userPrompt = buildUserPrompt(mealTypeHint, gramNotes);
 
   const start = Date.now();

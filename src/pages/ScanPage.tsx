@@ -333,7 +333,7 @@ export default function ScanPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { limit, isPro, canScan, showPaywall, consumeScan } = useScanLimit(user?.uid, user?.isPro)
-  const { strings } = useLocale()
+  const { strings, locale } = useLocale()
   const ap = strings.addPage
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -434,7 +434,7 @@ export default function ScanPage() {
     setAnalyzing(true)
 
     try {
-      const result = await analyzeMealImage(selectedFile)
+      const result = await analyzeMealImage(selectedFile, { locale })
 
       // ── SUCCESS: consume scan ONLY after successful analysis ──
       consumeScan()
