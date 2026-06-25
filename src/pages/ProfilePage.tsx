@@ -816,7 +816,6 @@ export default function ProfilePage() {
 
   // Bildirim tercihleri
   const mealReminders = user?.mealReminders ?? false
-  const weeklySummary = user?.weeklySummary ?? true
   const promoNotifs = user?.promoNotifs ?? false
   const updatePreference = (updates: Partial<UserProfile>) => {
     updateProfile(updates)
@@ -1145,21 +1144,6 @@ export default function ProfilePage() {
                       if (!granted) { openNotificationSettings(); return }
                     }
                     updatePreference({ mealReminders: v })
-                  }}
-                />
-                {/* C6 — Haftalık özet */}
-                <ToggleRow
-                  icon={<Star size={16} className="text-zinc-400" />}
-                  label={s.weeklySummary}
-                  sublabel={s.weeklySummarySub}
-                  value={weeklySummary}
-                  onChange={async (v) => {
-                    haptics.selectionChanged()
-                    if (v && isNative) {
-                      const granted = await ensurePermission()
-                      if (!granted) { openNotificationSettings(); return }
-                    }
-                    updatePreference({ weeklySummary: v })
                   }}
                 />
                 <ToggleRow

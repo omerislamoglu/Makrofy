@@ -34,7 +34,7 @@ export function useNotificationScheduler() {
   const { meals, todayMacros } = useTodayMeals(user?.uid)
 
   // En güncel context'i ref'te tut; resume listener stale closure'a düşmesin.
-  const ctxRef = useRef<{ ctx: NotificationContext; weekly: boolean } | null>(null)
+  const ctxRef = useRef<NotificationContext | null>(null)
 
   useEffect(() => {
     if (!user) {
@@ -63,10 +63,9 @@ export function useNotificationScheduler() {
       mealsLoggedToday: (meals?.length ?? 0) > 0,
       program,
     }
-    const weekly = user.weeklySummary ?? true
-    ctxRef.current = { ctx, weekly }
+    ctxRef.current = ctx
 
-    void rescheduleAll(ctx, weekly)
+    void rescheduleAll(ctx)
   }, [
     user,
     locale,
@@ -78,7 +77,7 @@ export function useNotificationScheduler() {
   useEffect(() => {
     const handler = () => {
       const cur = ctxRef.current
-      if (cur) void rescheduleAll(cur.ctx, cur.weekly)
+      if (cur) void rescheduleAll(cur)
     }
     window.addEventListener('app:resume', handler)
     return () => window.removeEventListener('app:resume', handler)

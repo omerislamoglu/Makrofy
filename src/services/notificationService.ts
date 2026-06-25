@@ -5,7 +5,6 @@
  *   A  (calorieReminder)    — Günlük kalori bütçesi hatırlatması (akşam)
  *   B2 (streakReminder)     — Seri hatırlatması (bugün öğün girilmediyse)
  *   B4 (dailyMotivation)    — Sabah motivasyonu + günlük hedef
- *   C6 (weeklySummary)      — Haftalık özet (Pazar akşamı)
  *   D7 (workoutReminder)    — Antrenman günü hatırlatması
  *   D8 (evaluationReminder) — 2 haftalık değerlendirme hatırlatması
  *
@@ -236,19 +235,6 @@ function buildSchedule(ctx: NotificationContext): ScheduledItem[] {
   return items
 }
 
-// Haftalık özet ayrı çünkü UserProfile.weeklySummary alanını kullanıyor.
-function buildWeekly(ctx: NotificationContext, weeklyEnabled: boolean): ScheduledItem[] {
-  if (!weeklyEnabled) return []
-  const t = getStrings(ctx.locale).notif
-  // Önümüzdeki Pazar 19:00
-  const now = new Date()
-  const daysUntilSunday = (7 - now.getDay()) % 7
-  const offset = daysUntilSunday === 0 ? (now.getHours() >= 19 ? 7 : 0) : daysUntilSunday
-  const at = dayAt(offset, 19, 0)
-  if (isPast(at)) return []
-  return [{ id: ID.weekly, title: t.weeklyTitle, body: t.weeklyBody, at }]
-}
-
 function buildWorkout(ctx: NotificationContext): ScheduledItem[] {
   if (!ctx.prefs.workoutReminder || !ctx.program?.isActive) return []
   const weekly = ctx.program.workoutPlan?.weeklyPlan ?? []
@@ -289,11 +275,9 @@ let scheduling = false
 
 /**
  * Tüm yönetilen bildirimleri iptal edip context'e göre yeniden planla.
- * `weeklyEnabled` UserProfile.weeklySummary'den gelir (C6).
  */
 export async function rescheduleAll(
   ctx: NotificationContext,
-  weeklyEnabled: boolean
 ): Promise<void> {
   const plugin = await getPlugin()
   if (!plugin) return
@@ -314,7 +298,6 @@ export async function rescheduleAll(
 
     const items = [
       ...buildSchedule(ctx),
-      ...buildWeekly(ctx, weeklyEnabled),
       ...buildWorkout(ctx),
       ...buildEvaluation(ctx),
     ]
