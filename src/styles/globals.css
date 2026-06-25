@@ -114,11 +114,8 @@ input[type="number"] {
   padding-top: calc(var(--sat) + 3.5rem); /* ~56px + status bar */
 }
 
-/* Bottom nav safe area wrapper */
-.bottom-nav-safe {
-  padding-bottom: var(--sab);
-  min-height: calc(var(--bottom-nav-height) + var(--sab));
-}
+/* Bottom nav: height is set inline (fixed px) by BottomNav component.
+   No CSS env() here — prevents iOS scroll-bounce resizing. */
 
 /* Page bottom padding accounts for bottom nav + safe area */
 .page-bottom {
