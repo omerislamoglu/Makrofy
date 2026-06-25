@@ -4,9 +4,9 @@
   --color-surface: #09090b;
   --color-border: #27272a;
 
-  /* Safe area insets — populated by iOS via CSS env() */
+  /* Safe area insets — JS locks --sab on boot to prevent scroll jank */
   --sat: env(safe-area-inset-top, 0px);
-  --sab: env(safe-area-inset-bottom, 0px);
+  --sab: 0px; /* overridden by JS in BottomNav on mount */
   --sal: env(safe-area-inset-left, 0px);
   --sar: env(safe-area-inset-right, 0px);
 

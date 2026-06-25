@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Home, Plus, Clock, Dumbbell, User, LucideIcon } from 'lucide-react'
 import { useHaptics } from '../../hooks/useCapacitor'
@@ -17,11 +18,40 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/profile', icon: User, labelKey: 'profile' },
 ]
 
+/**
+ * Read env(safe-area-inset-bottom) once and lock it into --sab.
+ * This prevents the bottom nav from resizing during iOS scroll bounce.
+ */
+let sabLocked = false
+function lockSafeAreaBottom() {
+  if (sabLocked) return
+  sabLocked = true
+  // Create a temp element to read the real env() value
+  const probe = document.createElement('div')
+  probe.style.cssText =
+    'position:fixed;bottom:0;left:0;height:env(safe-area-inset-bottom,0px);pointer-events:none;visibility:hidden;'
+  document.body.appendChild(probe)
+  // Read after layout
+  requestAnimationFrame(() => {
+    const px = probe.offsetHeight
+    probe.remove()
+    document.documentElement.style.setProperty('--sab', `${px}px`)
+  })
+}
+
 export default function BottomNav() {
   const navigate = useNavigate()
   const location = useLocation()
   const haptics = useHaptics()
   const { strings } = useLocale()
+  const locked = useRef(false)
+
+  useEffect(() => {
+    if (!locked.current) {
+      locked.current = true
+      lockSafeAreaBottom()
+    }
+  }, [])
 
   const handleNavPress = (path: string) => {
     if (location.pathname === path) return
@@ -31,7 +61,6 @@ export default function BottomNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 md:left-64 z-50">
-      {/* Solid background — no backdrop-blur to prevent iOS WKWebView scroll jank */}
       <div className="bg-black border-t border-zinc-800/50 bottom-nav-safe">
         <div className="flex justify-around items-center h-[49px] max-w-lg mx-auto">
           {NAV_ITEMS.map(({ path, icon: Icon, labelKey }) => {
