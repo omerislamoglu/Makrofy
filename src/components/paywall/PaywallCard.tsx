@@ -199,11 +199,11 @@ export default function PaywallCard({
           {disclaimer}
         </p>
         <p className="text-[11px] text-zinc-600">
-          <a href="https://makrofy.app/terms" target="_blank" rel="noopener noreferrer" className="underline">
+          <a href="https://makrofy-26820.web.app/terms" target="_blank" rel="noopener noreferrer" className="underline">
             {strings.profile.terms}
           </a>
           {' · '}
-          <a href="https://makrofy.app/privacy" target="_blank" rel="noopener noreferrer" className="underline">
+          <a href="https://makrofy-26820.web.app/privacy" target="_blank" rel="noopener noreferrer" className="underline">
             {strings.profile.privacyPolicy}
           </a>
         </p>

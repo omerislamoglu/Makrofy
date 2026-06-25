@@ -1185,7 +1185,7 @@ export default function ProfilePage() {
                   sublabel={s.privacyPolicySub}
                   onPress={() => {
                     haptics.impactLight()
-                    openURL('https://makrofy.app/privacy')
+                    openURL('https://makrofy-26820.web.app/privacy')
                   }}
                   trailing={<ExternalLink size={13} className="text-zinc-600" />}
                 />
@@ -1195,7 +1195,7 @@ export default function ProfilePage() {
                   sublabel={s.dataPreferencesSub}
                   onPress={() => {
                     haptics.impactLight()
-                    openURL('https://makrofy.app/data-preferences')
+                    openURL('https://makrofy-26820.web.app/data-preferences')
                   }}
                   trailing={<ExternalLink size={13} className="text-zinc-600" />}
                 />
@@ -1208,7 +1208,7 @@ export default function ProfilePage() {
                   label={s.terms}
                   onPress={() => {
                     haptics.impactLight()
-                    openURL('https://makrofy.app/terms')
+                    openURL('https://makrofy-26820.web.app/terms')
                   }}
                   trailing={<ExternalLink size={13} className="text-zinc-600" />}
                 />
@@ -1217,7 +1217,7 @@ export default function ProfilePage() {
                   label={s.openSource}
                   onPress={() => {
                     haptics.impactLight()
-                    openURL('https://makrofy.app/licenses')
+                    openURL('https://makrofy-26820.web.app/licenses')
                   }}
                   trailing={<ExternalLink size={13} className="text-zinc-600" />}
                 />

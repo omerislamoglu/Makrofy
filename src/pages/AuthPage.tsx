@@ -452,8 +452,8 @@ export default function AuthPage() {
           className="text-center text-[11px] text-zinc-700 mt-10 leading-relaxed"
         >
           {a.footerTerms}{' '}
-          <a href="https://makrofy.app/terms" target="_blank" rel="noopener noreferrer" className="text-zinc-500 underline">{a.footerTermsLink}</a> {a.footerAnd}{' '}
-          <a href="https://makrofy.app/privacy" target="_blank" rel="noopener noreferrer" className="text-zinc-500 underline">{a.footerPrivacyLink}</a>{a.footerAccept}
+          <a href="https://makrofy-26820.web.app/terms" target="_blank" rel="noopener noreferrer" className="text-zinc-500 underline">{a.footerTermsLink}</a> {a.footerAnd}{' '}
+          <a href="https://makrofy-26820.web.app/privacy" target="_blank" rel="noopener noreferrer" className="text-zinc-500 underline">{a.footerPrivacyLink}</a>{a.footerAccept}
         </motion.p>
       </motion.div>
     </div>

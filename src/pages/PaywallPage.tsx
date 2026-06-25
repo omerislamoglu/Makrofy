@@ -655,7 +655,7 @@ export default function PaywallPage() {
             <p className="text-[10px] text-zinc-600">
               <button
                 type="button"
-                onClick={() => openExternalUrl('https://makrofy.app/terms')}
+                onClick={() => openExternalUrl('https://makrofy-26820.web.app/terms')}
                 className="underline active:text-zinc-400"
               >
                 {strings.profile.terms}
@@ -663,7 +663,7 @@ export default function PaywallPage() {
               {' · '}
               <button
                 type="button"
-                onClick={() => openExternalUrl('https://makrofy.app/privacy')}
+                onClick={() => openExternalUrl('https://makrofy-26820.web.app/privacy')}
                 className="underline active:text-zinc-400"
               >
                 {strings.profile.privacyPolicy}
