@@ -903,7 +903,7 @@ export default function AnalysisResultPage() {
             <div className="relative rounded-2xl overflow-hidden border border-zinc-800/50">
               <img
                 src={initialResult.imagePreview}
-                alt="Meal photo"
+                alt={initialResult.mealName || an.pageTitle}
                 className="w-full h-44 object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
