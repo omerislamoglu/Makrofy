@@ -13,8 +13,8 @@ export const FAST_FOOD_ITEMS: FoodCatalogItem[] = [
   food({ id: 'cat-mcchicken', name: 'McChicken', brand: "McDonald's", cat: 'Fast Food', sub: 'Burger', cal: 244, p: 11, c: 25, f: 11, fib: 1.5, servings: [S.adet(175, '1 adet'), S.g100], aliases: ['mcchicken', 'mc chicken'] }),
   food({ id: 'cat-quarter-pounder', name: 'Quarter Pounder', brand: "McDonald's", cat: 'Fast Food', sub: 'Burger', cal: 267, p: 16, c: 17, f: 16, fib: 1, servings: [S.adet(195, '1 adet'), S.g100], aliases: ['quarter pounder', 'quarterpounder', 'qpc'] }),
   // ── Burger King ──────────────────────────────────────────
-  food({ id: 'cat-whopper', name: 'Whopper', brand: 'Burger King', cat: 'Fast Food', sub: 'Burger', cal: 253, p: 14, c: 20, f: 14, fib: 1.5, servings: [S.adet(302, '1 adet'), S.g100], aliases: ['whopper', 'burger king whopper'] }),
-  food({ id: 'cat-double-whopper', name: 'Double Whopper', brand: 'Burger King', cat: 'Fast Food', sub: 'Burger', cal: 386, p: 22, c: 21, f: 23, fib: 1.5, servings: [S.adet(285, '1 adet'), S.g100], aliases: ['double whopper'] }),
+  food({ id: 'cat-whopper', name: 'Whopper', brand: 'Burger King', cat: 'Fast Food', sub: 'Burger', cal: 231, p: 10, c: 16, f: 14, fib: 1, servings: [S.adet(291, '1 adet'), S.g100], aliases: ['whopper', 'burger king whopper'] }),
+  food({ id: 'cat-double-whopper', name: 'Double Whopper', brand: 'Burger King', cat: 'Fast Food', sub: 'Burger', cal: 241, p: 14, c: 13, f: 16, fib: 1, servings: [S.adet(374, '1 adet'), S.g100], aliases: ['double whopper'] }),
 
   // ── Pizza ────────────────────────────────────────────────
   food({ id: 'cat-pizza-margherita', name: 'Pizza Margherita (1 Dilim)', cat: 'Fast Food', sub: 'Pizza', cal: 230, p: 10, c: 28, f: 9, fib: 1.5, servings: [S.dilim(120, '1 dilim'), S.custom('2 dilim', 'dilim', 240), S.g100], aliases: ['margherita', 'margarita pizza', 'plain pizza'] }),

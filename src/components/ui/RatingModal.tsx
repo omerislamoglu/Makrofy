@@ -11,8 +11,8 @@ interface RatingModalProps {
 }
 
 export default function RatingModal({ show, onRate, onLater, onDismiss }: RatingModalProps) {
-  const { locale } = useLocale()
-  const isEN = locale === 'en'
+  const { strings } = useLocale()
+  const t = strings.rating
 
   if (!show) return null
 
@@ -35,7 +35,7 @@ export default function RatingModal({ show, onRate, onLater, onDismiss }: Rating
             type="button"
             onClick={onDismiss}
             className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400 hover:text-white transition-colors"
-            aria-label={isEN ? 'Close' : 'Kapat'}
+            aria-label={strings.common.close}
           >
             <X size={16} />
           </button>
@@ -46,20 +46,18 @@ export default function RatingModal({ show, onRate, onLater, onDismiss }: Rating
             </div>
             
             <h3 className="text-[20px] font-bold text-white mb-2">
-              {isEN ? 'Enjoying Makrofy?' : "Makrofy'ı Sevdin Mi?"}
+              {t.title}
             </h3>
             <p className="text-[13px] text-zinc-400 mb-6 leading-relaxed">
-              {isEN
-                ? 'Would you rate the app in the store? Your feedback helps us improve Makrofy.'
-                : 'Bize destek olmak için uygulamayı mağazada değerlendirir misin? Yorumların kendimizi geliştirmemiz için çok değerli.'}
+              {t.body}
             </p>
 
             <div className="w-full space-y-3">
               <Button variant="primary" fullWidth onClick={onRate}>
-                {isEN ? 'Rate Makrofy' : 'Beş Yıldız Ver'}
+                {t.rate}
               </Button>
               <Button variant="secondary" fullWidth onClick={onLater}>
-                {isEN ? 'Later' : 'Daha Sonra'}
+                {t.later}
               </Button>
             </div>
           </div>

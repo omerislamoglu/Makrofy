@@ -81,6 +81,7 @@ export type ScanErrorCode =
   | 'image_too_large'
   | 'unsupported_format'
   | 'analysis_failed'
+  | 'network_error'
   | 'timeout'
   | 'rate_limited'
   | 'no_food_detected'

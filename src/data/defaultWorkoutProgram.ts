@@ -1,18 +1,34 @@
 import type { WorkoutProgram } from '../types/workout'
 import { uid } from '../types/workout'
 
+interface ProgramLabels {
+  name: string
+  monday: string
+  wednesday: string
+  friday: string
+}
+
+const PROGRAM_LABELS: Record<string, ProgramLabels> = {
+  tr: { name: 'Makrofy Başlangıç Programı', monday: 'Pazartesi', wednesday: 'Çarşamba', friday: 'Cuma' },
+  en: { name: 'Makrofy Starter Program', monday: 'Monday', wednesday: 'Wednesday', friday: 'Friday' },
+  de: { name: 'Makrofy Starterprogramm', monday: 'Montag', wednesday: 'Mittwoch', friday: 'Freitag' },
+  fr: { name: 'Programme débutant Makrofy', monday: 'Lundi', wednesday: 'Mercredi', friday: 'Vendredi' },
+  es: { name: 'Programa inicial de Makrofy', monday: 'Lunes', wednesday: 'Miércoles', friday: 'Viernes' },
+  it: { name: 'Programma base Makrofy', monday: 'Lunedì', wednesday: 'Mercoledì', friday: 'Venerdì' },
+}
+
 export function createDefaultProgram(locale = 'tr'): WorkoutProgram {
   const now = new Date().toISOString()
-  const isEN = locale === 'en'
+  const L = PROGRAM_LABELS[locale] ?? PROGRAM_LABELS.en
 
   return {
     id: 'main',
-    name: isEN ? 'Makrofy Starter Program' : 'Makrofy Başlangıç Programı',
+    name: L.name,
     source: 'makrofy',
     days: [
       {
         id: uid(),
-        dayName: isEN ? 'Monday' : 'Pazartesi',
+        dayName: L.monday,
         exercises: [
           { id: uid(), name: 'Squat', sets: 3, reps: 10, defaultWeight: 0, note: '' },
           { id: uid(), name: 'Bench Press', sets: 3, reps: 10, defaultWeight: 0, note: '' },
@@ -22,7 +38,7 @@ export function createDefaultProgram(locale = 'tr'): WorkoutProgram {
       },
       {
         id: uid(),
-        dayName: isEN ? 'Wednesday' : 'Çarşamba',
+        dayName: L.wednesday,
         exercises: [
           { id: uid(), name: 'Romanian Deadlift', sets: 3, reps: 10, defaultWeight: 0, note: '' },
           { id: uid(), name: 'Incline Dumbbell Press', sets: 3, reps: 10, defaultWeight: 0, note: '' },
@@ -32,7 +48,7 @@ export function createDefaultProgram(locale = 'tr'): WorkoutProgram {
       },
       {
         id: uid(),
-        dayName: isEN ? 'Friday' : 'Cuma',
+        dayName: L.friday,
         exercises: [
           { id: uid(), name: 'Deadlift', sets: 3, reps: 6, defaultWeight: 0, note: '' },
           { id: uid(), name: 'Dumbbell Bench Press', sets: 3, reps: 10, defaultWeight: 0, note: '' },

@@ -3,7 +3,11 @@ import { BrowserRouter } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import AppRoutes from './routes'
 import { useAppLifecycle } from '../hooks/useAppLifecycle'
+import { useNetworkStatus } from '../hooks/useNetworkStatus'
+import { useNotificationScheduler } from '../hooks/useNotificationScheduler'
 import SplashScreen from '../components/SplashScreen'
+import ToastHost from '../components/ToastHost'
+import LanguageGate from '../components/LanguageGate'
 import { LocaleProvider } from '../contexts/LocaleContext'
 
 // Lazy import Capacitor plugins (only when running native)
@@ -41,6 +45,10 @@ async function initCapacitor() {
 function AppShell() {
   // Native lifecycle: back button, app pause/resume, deep links
   useAppLifecycle()
+  // Real-time network status — dispatches app:online / app:offline events
+  useNetworkStatus()
+  // Yerel bildirimleri planla (kalori, seri, motivasyon, antrenman, vb.)
+  useNotificationScheduler()
   return <AppRoutes />
 }
 
@@ -55,9 +63,12 @@ export default function App() {
   return (
     <LocaleProvider>
       {showSplash && <SplashScreen onFinish={handleSplashFinish} />}
-      <BrowserRouter>
-        <AppShell />
-      </BrowserRouter>
+      <LanguageGate>
+        <BrowserRouter>
+          <AppShell />
+        </BrowserRouter>
+        <ToastHost />
+      </LanguageGate>
     </LocaleProvider>
   )
 }

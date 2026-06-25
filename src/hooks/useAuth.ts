@@ -33,6 +33,11 @@ const DEMO_USER: UserProfile = {
   mealReminders: false,
   weeklySummary: true,
   promoNotifs: false,
+  calorieReminder: true,
+  streakReminder: true,
+  dailyMotivation: true,
+  workoutReminder: true,
+  evaluationReminder: true,
   dateKey: new Date().toISOString().split('T')[0],
   bodyMetrics: undefined,
 }

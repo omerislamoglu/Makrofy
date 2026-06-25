@@ -35,7 +35,6 @@ export function validateRequest(data: unknown): ValidatedRequest {
 
   // ── Resolve image source: imageData (native) or imageUrl (web) ──────
   let imageUrl: string;
-  let isDataUrl = false;
 
   if (typeof body.imageData === "string" && body.imageData.trim().length > 0) {
     // Native iOS path: base64 data URL
@@ -53,7 +52,6 @@ export function validateRequest(data: unknown): ValidatedRequest {
       );
     }
     imageUrl = trimmed;
-    isDataUrl = true;
   } else if (typeof body.imageUrl === "string" && body.imageUrl.trim().length > 0) {
     // Web path: HTTPS or gs:// URL
     const trimmed = body.imageUrl.trim();
@@ -79,7 +77,6 @@ export function validateRequest(data: unknown): ValidatedRequest {
       );
     }
     imageUrl = trimmed;
-    isDataUrl = isDataImage;
   } else {
     throw new HttpsError(
       "invalid-argument",
@@ -113,10 +110,10 @@ export function validateRequest(data: unknown): ValidatedRequest {
         "gramNotes must be a string."
       );
     }
-    if (body.gramNotes.length > 500) {
+    if (body.gramNotes.length > 1500) {
       throw new HttpsError(
         "invalid-argument",
-        "gramNotes exceeds the maximum allowed length (500 chars)."
+        "gramNotes exceeds the maximum allowed length (1500 chars)."
       );
     }
     gramNotes = body.gramNotes.trim() || undefined;
@@ -133,5 +130,5 @@ export function validateRequest(data: unknown): ValidatedRequest {
     dateKey = body.dateKey;
   }
 
-  return { imageUrl, isDataUrl, mealTypeHint, gramNotes, dateKey };
+  return { imageUrl, isDataUrl: imageUrl.startsWith("data:image/"), mealTypeHint, gramNotes, dateKey };
 }

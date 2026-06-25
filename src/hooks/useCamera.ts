@@ -37,6 +37,14 @@ export function useCamera() {
         const { Camera, CameraResultType, CameraSource } = await import(
           '@capacitor/camera'
         )
+
+        // Önceden reddedilmiş izni tespit et — iOS/Android'de Ayarlar'a
+        // yönlendirme gerekir; tekrar istemek işe yaramaz.
+        const perms = await Camera.checkPermissions()
+        if (perms.camera === 'denied') {
+          throw new Error('PERMISSION_DENIED_CAMERA')
+        }
+
         const photo = await Camera.getPhoto({
           quality: 80,
           allowEditing: false,
@@ -67,6 +75,14 @@ export function useCamera() {
           msg.includes('User cancelled')
         ) {
           return null
+        }
+        // Kullanıcı sistem diyaloğundan reddetti (henüz denied değildi)
+        if (
+          msg.toLowerCase().includes('permission') ||
+          msg.toLowerCase().includes('denied') ||
+          msg.toLowerCase().includes('not authorized')
+        ) {
+          throw new Error('PERMISSION_DENIED_CAMERA')
         }
         throw err
       }
@@ -100,6 +116,13 @@ export function useCamera() {
         const { Camera, CameraResultType, CameraSource } = await import(
           '@capacitor/camera'
         )
+
+        // Önceden reddedilmiş galeri iznini tespit et.
+        const perms = await Camera.checkPermissions()
+        if (perms.photos === 'denied') {
+          throw new Error('PERMISSION_DENIED_GALLERY')
+        }
+
         const photo = await Camera.getPhoto({
           quality: 80,
           allowEditing: false,
@@ -128,6 +151,13 @@ export function useCamera() {
           msg.includes('User cancelled')
         ) {
           return null
+        }
+        if (
+          msg.toLowerCase().includes('permission') ||
+          msg.toLowerCase().includes('denied') ||
+          msg.toLowerCase().includes('not authorized')
+        ) {
+          throw new Error('PERMISSION_DENIED_GALLERY')
         }
         throw err
       }

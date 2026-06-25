@@ -1,8 +1,31 @@
 import tr from './locales/tr'
 import type { AppStrings } from './locales/types'
 import en from './locales/en'
+import de from './locales/de'
+import fr from './locales/fr'
+import es from './locales/es'
+import it from './locales/it'
 
-export type AppLocale = 'tr' | 'en'
+export type AppLocale = 'tr' | 'en' | 'de' | 'fr' | 'es' | 'it'
+
+const STRINGS_BY_LOCALE: Record<AppLocale, AppStrings> = {
+  tr,
+  en,
+  de,
+  fr,
+  es,
+  it,
+}
+
+/** İlk açılış dil ekranında ve ayarlarda gösterilen dil listesi. */
+export const SUPPORTED_LOCALES: { code: AppLocale; label: string; flag: string }[] = [
+  { code: 'en', label: 'English', flag: '🌐' },
+  { code: 'tr', label: 'Türkçe', flag: '🇹🇷' },
+  { code: 'de', label: 'Deutsch', flag: '🇩🇪' },
+  { code: 'fr', label: 'Français', flag: '🇫🇷' },
+  { code: 'es', label: 'Español', flag: '🇪🇸' },
+  { code: 'it', label: 'Italiano', flag: '🇮🇹' },
+]
 
 export interface PlanDisplay {
   id: 'pro_monthly' | 'pro_quarterly' | 'pro_yearly'
@@ -25,6 +48,7 @@ export interface LocaleConfig {
 }
 
 const LOCALE_OVERRIDE_KEY = 'makrofy_locale_override'
+const LANGUAGE_CHOSEN_KEY = 'makrofy_language_chosen'
 
 // ─── Para birimi ve fiyat tespiti ────────────────────────────────────────────
 // App Store Connect fiyatlarıyla birebir eşleşen sabit değerler.
@@ -37,7 +61,7 @@ interface CurrencyPricing {
 }
 
 const CURRENCY_MAP: Record<string, CurrencyPricing> = {
-  TR: { currencyCode: 'TRY', monthly: 149.99, quarterly: 349.99, yearly: 999.99 },
+  TR: { currencyCode: 'TRY', monthly: 199.99, quarterly: 499.99, yearly: 1299.99 },
   US: { currencyCode: 'USD', monthly: 4.99, quarterly: 11.99, yearly: 29.99 },
   CA: { currencyCode: 'CAD', monthly: 6.99, quarterly: 16.99, yearly: 39.99 },
   GB: { currencyCode: 'GBP', monthly: 3.99, quarterly: 9.99, yearly: 24.99 },
@@ -121,15 +145,33 @@ export function detectCurrencyInfo(rawLocale: string): CurrencyPricing {
 }
 
 // ─── Locale tespiti ──────────────────────────────────────────────────────────
-export function detectLocale(): AppLocale {
-  // Manuel override (ayarlardan)
-  const override = localStorage.getItem(LOCALE_OVERRIDE_KEY) as AppLocale | null
-  if (override === 'en') return 'en'
+const SUPPORTED_LOCALE_CODES: AppLocale[] = ['tr', 'en', 'de', 'fr', 'es', 'it']
 
-  // Cihaz dili
+function isSupportedLocale(value: string | null): value is AppLocale {
+  return value !== null && (SUPPORTED_LOCALE_CODES as string[]).includes(value)
+}
+
+export function detectLocale(): AppLocale {
+  // Manuel override (ilk açılış dil ekranı veya ayarlar). Desteklenen tüm diller
+  // kalıcıdır — böylece cihaz diliyle eşleşmeyen bir dil seçen kullanıcı uygulamayı
+  // yeniden açınca seçtiği dili korur.
+  const override = localStorage.getItem(LOCALE_OVERRIDE_KEY)
+  if (isSupportedLocale(override)) return override
+
+  // Cihaz dili: desteklenen bir dile eşleşirse onu, yoksa İngilizce'yi kullan.
   const raw = navigator.language || 'en'
   const lang = raw.toLowerCase().split('-')[0]
-  return lang === 'tr' ? 'tr' : 'en'
+  return isSupportedLocale(lang) ? lang : 'en'
+}
+
+/** İlk açılış dil ekranı daha önce gösterilip seçim yapıldı mı? */
+export function hasChosenLanguage(): boolean {
+  return localStorage.getItem(LANGUAGE_CHOSEN_KEY) === '1'
+}
+
+/** Kullanıcı ilk açılış ekranından dil seçtiğini işaretle. */
+export function markLanguageChosen(): void {
+  localStorage.setItem(LANGUAGE_CHOSEN_KEY, '1')
 }
 
 export function setLocaleOverride(locale: AppLocale | null) {
@@ -159,13 +201,81 @@ export function formatCurrencyAmount(
   }).format(amount)
 }
 
+// Plan etiketleri her dil için. Fiyatlar RevenueCat/App Store'dan dinamik gelir;
+// burada yalnızca metin etiketleri yerelleştirilir.
+interface PlanLabels {
+  proPeriod: string
+  monthlyTitle: string
+  monthlyPeriod: string
+  monthlyNote: string
+  quarterlyTitle: string
+  quarterlyPeriod: string
+  perMonthSuffix: string
+  quarterlyNote: string
+  yearlyTitle: string
+  yearlyPeriod: string
+  yearlyNote: string
+  savings: (pct: number) => string
+}
+
+const PLAN_LABELS: Record<AppLocale, PlanLabels> = {
+  tr: {
+    proPeriod: 'aylık',
+    monthlyTitle: 'Aylık', monthlyPeriod: '/ay', monthlyNote: 'Her ay yenilenir',
+    quarterlyTitle: '3 Aylık', quarterlyPeriod: '/3 ay', perMonthSuffix: '/ay',
+    quarterlyNote: '3 ayda bir ödenir',
+    yearlyTitle: 'Yıllık', yearlyPeriod: '/yıl', yearlyNote: 'Yılda bir ödenir · 12 ay',
+    savings: (pct) => `%${pct} indirim`,
+  },
+  en: {
+    proPeriod: '/month',
+    monthlyTitle: 'Monthly', monthlyPeriod: '/mo', monthlyNote: 'Billed monthly',
+    quarterlyTitle: '3 Months', quarterlyPeriod: '/3mo', perMonthSuffix: '/mo',
+    quarterlyNote: 'Billed every 3 months',
+    yearlyTitle: 'Yearly', yearlyPeriod: '/yr', yearlyNote: 'Billed annually · 12 months',
+    savings: (pct) => `Save ${pct}%`,
+  },
+  de: {
+    proPeriod: '/Monat',
+    monthlyTitle: 'Monatlich', monthlyPeriod: '/Mon', monthlyNote: 'Monatliche Abrechnung',
+    quarterlyTitle: '3 Monate', quarterlyPeriod: '/3 Mon', perMonthSuffix: '/Mon',
+    quarterlyNote: 'Abrechnung alle 3 Monate',
+    yearlyTitle: 'Jährlich', yearlyPeriod: '/Jahr', yearlyNote: 'Jährliche Abrechnung · 12 Monate',
+    savings: (pct) => `${pct}% sparen`,
+  },
+  fr: {
+    proPeriod: '/mois',
+    monthlyTitle: 'Mensuel', monthlyPeriod: '/mois', monthlyNote: 'Facturé chaque mois',
+    quarterlyTitle: '3 mois', quarterlyPeriod: '/3 mois', perMonthSuffix: '/mois',
+    quarterlyNote: 'Facturé tous les 3 mois',
+    yearlyTitle: 'Annuel', yearlyPeriod: '/an', yearlyNote: 'Facturé chaque année · 12 mois',
+    savings: (pct) => `-${pct} %`,
+  },
+  es: {
+    proPeriod: '/mes',
+    monthlyTitle: 'Mensual', monthlyPeriod: '/mes', monthlyNote: 'Facturación mensual',
+    quarterlyTitle: '3 meses', quarterlyPeriod: '/3 meses', perMonthSuffix: '/mes',
+    quarterlyNote: 'Facturación cada 3 meses',
+    yearlyTitle: 'Anual', yearlyPeriod: '/año', yearlyNote: 'Facturación anual · 12 meses',
+    savings: (pct) => `Ahorra ${pct}%`,
+  },
+  it: {
+    proPeriod: '/mese',
+    monthlyTitle: 'Mensile', monthlyPeriod: '/mese', monthlyNote: 'Fatturazione mensile',
+    quarterlyTitle: '3 mesi', quarterlyPeriod: '/3 mesi', perMonthSuffix: '/mese',
+    quarterlyNote: 'Fatturazione ogni 3 mesi',
+    yearlyTitle: 'Annuale', yearlyPeriod: '/anno', yearlyNote: 'Fatturazione annuale · 12 mesi',
+    savings: (pct) => `Risparmia ${pct}%`,
+  },
+}
+
 export function buildLocaleConfig(locale: AppLocale): LocaleConfig {
   const rawLocale = navigator.language || 'en'
   const pricing = detectCurrencyInfo(rawLocale)
   const { currencyCode, monthly, quarterly, yearly } = pricing
 
-  const strings = locale === 'tr' ? tr : en
-  const isTr = locale === 'tr'
+  const strings = STRINGS_BY_LOCALE[locale] ?? en
+  const L = PLAN_LABELS[locale] ?? PLAN_LABELS.en
 
   const fmt = (n: number) => formatCurrencyAmount(n, currencyCode, rawLocale)
 
@@ -180,32 +290,32 @@ export function buildLocaleConfig(locale: AppLocale): LocaleConfig {
     locale,
     currency: currencyCode,
     proPrice: fmt(monthly),
-    proPeriod: isTr ? 'aylık' : '/month',
+    proPeriod: L.proPeriod,
     plans: {
       monthly: {
         id: 'pro_monthly',
-        title: isTr ? 'Aylık' : 'Monthly',
+        title: L.monthlyTitle,
         price: fmt(monthly),
-        period: isTr ? '/ay' : '/mo',
-        note: isTr ? 'Her ay yenilenir' : 'Billed monthly',
+        period: L.monthlyPeriod,
+        note: L.monthlyNote,
       },
       quarterly: {
         id: 'pro_quarterly',
-        title: isTr ? '3 Aylık' : '3 Months',
+        title: L.quarterlyTitle,
         price: fmt(quarterly),
-        period: isTr ? '/3 ay' : '/3mo',
-        perMonth: `${fmt(quarterlyPerMonth)}${isTr ? '/ay' : '/mo'}`,
-        note: isTr ? '3 ayda bir ödenir' : 'Billed every 3 months',
-        savings: isTr ? `%${quarterlyPct} indirim` : `Save ${quarterlyPct}%`,
+        period: L.quarterlyPeriod,
+        perMonth: `${fmt(quarterlyPerMonth)}${L.perMonthSuffix}`,
+        note: L.quarterlyNote,
+        savings: L.savings(quarterlyPct),
       },
       yearly: {
         id: 'pro_yearly',
-        title: isTr ? 'Yıllık' : 'Yearly',
+        title: L.yearlyTitle,
         price: fmt(yearly),
-        period: isTr ? '/yıl' : '/yr',
-        perMonth: `${fmt(yearlyPerMonth)}${isTr ? '/ay' : '/mo'}`,
-        note: isTr ? 'Yılda bir ödenir · 12 ay' : 'Billed annually · 12 months',
-        savings: isTr ? `%${yearlyPct} indirim` : `Save ${yearlyPct}%`,
+        period: L.yearlyPeriod,
+        perMonth: `${fmt(yearlyPerMonth)}${L.perMonthSuffix}`,
+        note: L.yearlyNote,
+        savings: L.savings(yearlyPct),
         highlight: true,
       },
     },
@@ -213,4 +323,9 @@ export function buildLocaleConfig(locale: AppLocale): LocaleConfig {
   }
 }
 
-export { tr, en }
+/** React dışı bağlamlarda (ör. bildirim servisi) bir dilin metinlerini al. */
+export function getStrings(locale: AppLocale): AppStrings {
+  return STRINGS_BY_LOCALE[locale] ?? en
+}
+
+export { tr, en, de, fr, es, it }

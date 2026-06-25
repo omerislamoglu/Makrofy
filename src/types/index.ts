@@ -60,11 +60,9 @@ export type {
   SubscriptionStatus,
   SubscriptionPlatform,
   ScanLimit,
-  PlanPricing,
   PaywallConfig,
   PaywallFeature,
 } from './subscription'
 export {
   FREE_DAILY_SCAN_LIMIT,
-  PLAN_PRICES,
 } from './subscription'

@@ -1,0 +1,5 @@
+/* English localization for Info.plist usage descriptions */
+
+NSCameraUsageDescription = "Makrofy needs camera access to take food photos and estimate their nutritional values.";
+NSMotionUsageDescription = "Makrofy needs motion data access to show your daily step count and calories burned from walking.";
+NSPhotoLibraryUsageDescription = "Makrofy needs photo library access to let you pick food or program photos for nutritional analysis.";

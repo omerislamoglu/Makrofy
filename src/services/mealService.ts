@@ -30,6 +30,9 @@ import {
 } from '../types/nutrition'
 import { getToday } from '../utils/date'
 import { createId } from '../utils/id'
+import { pushOptimisticMeal, resolveOptimisticMeal, failOptimisticMeal, queueOptimisticMeal } from './optimisticMeals'
+import { enqueueMeal, dequeueMeal, getQueueEntries } from './offlineQueue'
+import type { OfflineQueueEntry } from './offlineQueue'
 
 // ─── Demo persistence (localStorage) ─────────────────────────────────────────
 // Without Firebase credentials the app runs in demo mode; persist meals locally
@@ -187,8 +190,32 @@ function normalizeFoodItem(item: FoodItem): FoodItem {
 
 let _cachedFirebaseAuth: typeof import('@capacitor-firebase/authentication').FirebaseAuthentication | null = null
 let _cachedCapacitorToken: { token: string; expiresAt: number } | null = null
+// The uid the cached token was minted for. The native Firebase ID token is
+// derived from whichever account is currently signed in, and the Cloud Functions
+// resolve the uid FROM that token (not from any client-passed id). Caching the
+// token across an account switch therefore leaks one user's meals into the
+// next user's session. Binding the cache to the expected uid forces a refresh
+// the instant the active account changes.
+let _cachedTokenUserId: string | null = null
 
-async function getCapacitorToken(): Promise<string> {
+/**
+ * Clear the cached native auth token. MUST be called on sign-out (and is also
+ * self-healing via the uid check in `getCapacitorToken`) so the next account's
+ * requests never reuse the previous account's still-valid token.
+ */
+export function clearNativeMealAuthCache(): void {
+  _cachedCapacitorToken = null
+  _cachedTokenUserId = null
+}
+
+async function getCapacitorToken(expectedUserId?: string): Promise<string> {
+  // If the cached token was minted for a different account, drop it before the
+  // freshness check so we never hand back the previous user's token.
+  const userMismatch =
+    !!expectedUserId && _cachedTokenUserId !== null && _cachedTokenUserId !== expectedUserId
+  if (userMismatch) {
+    _cachedCapacitorToken = null
+  }
   if (_cachedCapacitorToken && _cachedCapacitorToken.expiresAt > Date.now()) {
     return _cachedCapacitorToken.token
   }
@@ -196,12 +223,15 @@ async function getCapacitorToken(): Promise<string> {
     const mod = await import('@capacitor-firebase/authentication')
     _cachedFirebaseAuth = mod.FirebaseAuthentication
   }
-  const { token } = await _cachedFirebaseAuth.getIdToken({ forceRefresh: false })
+  // Force a fresh token when the account just changed so the native SDK cannot
+  // return the previous user's cached token.
+  const { token } = await _cachedFirebaseAuth.getIdToken({ forceRefresh: userMismatch })
   if (!token) throw new Error('No auth token available on native')
   _cachedCapacitorToken = {
     token,
     expiresAt: Date.now() + 50 * 60 * 1000,
   }
+  if (expectedUserId) _cachedTokenUserId = expectedUserId
   return token
 }
 
@@ -211,7 +241,7 @@ function getCFEndpoint(fnName: string): string {
   return `https://${region}-${projectId}.cloudfunctions.net/${fnName}`
 }
 
-async function saveMealNative(localMeal: Meal, existingMealId?: string): Promise<Meal> {
+async function saveMealNative(localMeal: Meal, existingMealId?: string, emit = true): Promise<Meal> {
   const endpoint = getCFEndpoint('saveAnalyzedMeal')
 
   // Sanitize items — only send fields the CF needs
@@ -254,7 +284,7 @@ async function saveMealNative(localMeal: Meal, existingMealId?: string): Promise
   })
 
   // Try with cached token first, retry once with fresh token on 401
-  let token = await getCapacitorToken()
+  let token = await getCapacitorToken(localMeal.userId)
   let response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -267,7 +297,7 @@ async function saveMealNative(localMeal: Meal, existingMealId?: string): Promise
   // If 401/403, clear cache and retry with a fresh token
   if (response.status === 401 || response.status === 403) {
     _cachedCapacitorToken = null
-    token = await getCapacitorToken()
+    token = await getCapacitorToken(localMeal.userId)
     response = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -294,7 +324,7 @@ async function saveMealNative(localMeal: Meal, existingMealId?: string): Promise
 
   const mealId = result.result?.mealId ?? localMeal.id
   if (DEBUG_MEALS) console.log('[MEAL_SAVE_NATIVE] success', { mealId, source: localMeal.source })
-  emitMealsUpdated()
+  if (emit) emitMealsUpdated()
   return { ...localMeal, id: mealId }
 }
 
@@ -347,18 +377,14 @@ function docToMeal(docSnap: { id: string; data: () => Record<string, unknown> })
 // ─── Create ─────────────────────────────────────────────────────────────────
 
 /**
- * Create a new meal document under `users/{userId}/meals`.
- *
- * Accepts either a `MealFormData` (from the manual-entry form, where macros
- * are computed from per-100 g values) or a pre-built partial `Meal` (from
- * AI scan results where items already carry computed macros).
+ * Build the local `Meal` for a create — pure & synchronous, no I/O.
+ * Shared by `createMeal` (persistence) and `createMealOptimistic` (instant UI),
+ * so the optimistically-shown meal matches exactly what gets persisted.
  */
-export async function createMeal(
+function buildCreateMealLocal(
   userId: string,
   data: MealFormData | Omit<Meal, 'id' | 'userId' | 'createdAt' | 'updatedAt'>
-): Promise<Meal> {
-  assertUserId(userId)
-
+): Meal {
   let items: FoodItem[]
   let mealType: MealType
   let source: Meal['source']
@@ -412,7 +438,7 @@ export async function createMeal(
     : todayKey()
 
   const nowIso = new Date().toISOString()
-  const localMeal: Meal = {
+  return {
     id: createId(),
     userId,
     name: notes || items.map((item) => item.name).join(' · ') || 'Meal',
@@ -433,10 +459,32 @@ export async function createMeal(
     ...(notes && { notes }),
     ...(confidence && { confidence }),
   }
+}
+
+/**
+ * Create a new meal document under `users/{userId}/meals`.
+ *
+ * Accepts either a `MealFormData` (from the manual-entry form, where macros
+ * are computed from per-100 g values) or a pre-built partial `Meal` (from
+ * AI scan results where items already carry computed macros).
+ *
+ * `emit` controls the `makrofy:meals-updated` dispatch on success. Optimistic
+ * wrappers pass `false` and emit themselves once the optimistic copy has been
+ * reconciled, so the UI never shows the optimistic and real meal at once.
+ */
+export async function createMeal(
+  userId: string,
+  data: MealFormData | Omit<Meal, 'id' | 'userId' | 'createdAt' | 'updatedAt'>,
+  emit = true
+): Promise<Meal> {
+  assertUserId(userId)
+
+  const localMeal = buildCreateMealLocal(userId, data)
+  const { items, totalMacros, mealType, source, dateKey, imageUrl, notes, confidence } = localMeal
 
   if (isDemoMode) {
     demoWriteMeals(userId, [localMeal, ...demoReadMeals(userId)])
-    emitMealsUpdated()
+    if (emit) emitMealsUpdated()
     return localMeal
   }
 
@@ -452,7 +500,7 @@ export async function createMeal(
 
   // On native iOS, use Cloud Function (Firestore Web SDK auth not synced)
   if (Capacitor.isNativePlatform()) {
-    return saveMealNative(localMeal)
+    return saveMealNative(localMeal, undefined, emit)
   }
 
   // Web path: direct Firestore write
@@ -488,7 +536,7 @@ export async function createMeal(
       updatedAt: Timestamp.now(),
     }
     if (DEBUG_MEALS) console.log('[MEAL_SAVE] createMeal success', { mealId: ref.id })
-    emitMealsUpdated()
+    if (emit) emitMealsUpdated()
     return remoteMeal
   } catch (error) {
     console.error('[MEAL_SAVE] createMeal write error', {
@@ -503,7 +551,8 @@ export async function createMeal(
 export async function saveAIScanMeal(
   userId: string,
   data: SaveAIScanMealPayload,
-  existingMealId?: string
+  existingMealId?: string,
+  emit = true
 ): Promise<Meal> {
   assertUserId(userId)
 
@@ -515,7 +564,7 @@ export async function saveAIScanMeal(
       ? [localMeal, ...existingMeals.filter((meal) => meal.id !== existingMealId)]
       : [localMeal, ...existingMeals]
     demoWriteMeals(userId, nextMeals)
-    emitMealsUpdated()
+    if (emit) emitMealsUpdated()
     return localMeal
   }
 
@@ -531,7 +580,7 @@ export async function saveAIScanMeal(
 
   // On native iOS, use Cloud Function via manual fetch (Firestore Web SDK auth not synced)
   if (Capacitor.isNativePlatform()) {
-    return saveMealNative(localMeal, existingMealId)
+    return saveMealNative(localMeal, existingMealId, emit)
   }
 
   // Web path: direct Firestore write
@@ -577,13 +626,129 @@ export async function saveAIScanMeal(
       documentId: mealId,
       writePath: `users/${userId}/meals/${mealId}`,
     })
-    emitMealsUpdated()
+    if (emit) emitMealsUpdated()
     return { ...localMeal, id: mealId, updatedAt: Timestamp.now() }
   } catch (error) {
     const details = serializeError(error)
     console.error('[AI_SAVE] save failed full error', details)
     throw error
   }
+}
+
+
+// ─── Optimistic save (instant, single-tap) ──────────────────────────────────
+// Build the local Meal synchronously, show it in the UI immediately, then
+// persist in the background. The caller navigates right away. On success the
+// optimistic copy is dropped so the freshly-fetched real doc takes over; on
+// failure it is removed and an error toast is dispatched (or queued if offline).
+
+/** Returns true when the error is caused by a missing / dropped network connection. */
+function isNetworkError(error: unknown): boolean {
+  if (!navigator.onLine) return true
+  const msg = (error instanceof Error ? error.message : String(error)).toLowerCase()
+  return (
+    msg.includes('failed to fetch') ||
+    msg.includes('network') ||
+    msg.includes('offline') ||
+    msg.includes('connection') ||
+    msg.includes('internet') ||
+    msg.includes('host') ||
+    msg.includes('unreachable') ||
+    msg.includes('networkerror')
+  )
+}
+
+type BackgroundSaveQueueMeta = {
+  userId: string
+  meal: Meal
+  saveType: OfflineQueueEntry['saveType']
+  existingMealId?: string
+}
+
+function runBackgroundSave(
+  persist: () => Promise<Meal>,
+  optimisticId: string,
+  /** When provided, a network failure queues the meal instead of failing it. */
+  offlineMeta?: BackgroundSaveQueueMeta
+): void {
+  persist()
+    .then(() => resolveOptimisticMeal(optimisticId))
+    .catch((error) => {
+      console.error('[MEAL_SAVE] background save failed', serializeError(error))
+      if (offlineMeta && isNetworkError(error)) {
+        // Offline → queue for later, keep the meal visible in the UI
+        enqueueMeal(offlineMeta.userId, offlineMeta.meal, offlineMeta.saveType, offlineMeta.existingMealId)
+        queueOptimisticMeal(optimisticId)
+      } else {
+        failOptimisticMeal(optimisticId, getSaveErrorMessage(error))
+      }
+    })
+}
+
+/** Manual / text / restaurant saves — returns the local Meal immediately. */
+export function createMealOptimistic(
+  userId: string,
+  data: MealFormData | Omit<Meal, 'id' | 'userId' | 'createdAt' | 'updatedAt'>
+): Meal {
+  assertUserId(userId)
+  const localMeal = buildCreateMealLocal(userId, data)
+  pushOptimisticMeal(localMeal)
+  runBackgroundSave(
+    () => createMeal(userId, data, false),
+    localMeal.id,
+    { userId, meal: localMeal, saveType: 'createMeal' }
+  )
+  return localMeal
+}
+
+/** AI-scan saves (and edits via `existingMealId`) — returns the local Meal immediately. */
+export function saveAIScanMealOptimistic(
+  userId: string,
+  data: SaveAIScanMealPayload,
+  existingMealId?: string
+): Meal {
+  assertUserId(userId)
+  const localMeal = buildNormalizedMeal(userId, data, existingMealId || createId())
+  pushOptimisticMeal(localMeal)
+  runBackgroundSave(
+    () => saveAIScanMeal(userId, data, existingMealId, false),
+    localMeal.id,
+    { userId, meal: localMeal, saveType: 'saveAIScanMeal', existingMealId }
+  )
+  return localMeal
+}
+
+/**
+ * Retry all meals in the offline queue for the given user.
+ * Safe to call repeatedly — skips if already online check fails or queue empty.
+ * Call this when the network comes back (`app:online` event) or on `app:resume`.
+ */
+export async function drainOfflineQueueMeals(userId: string): Promise<void> {
+  if (!navigator.onLine) return
+  const entries = getQueueEntries(userId)
+  if (entries.length === 0) return
+
+  if (DEBUG_MEALS) console.log('[OFFLINE_QUEUE] draining', { count: entries.length })
+
+  let anySaved = false
+  for (const entry of entries) {
+    try {
+      if (entry.saveType === 'saveAIScanMeal') {
+        await saveAIScanMeal(userId, entry.meal as SaveAIScanMealPayload, entry.existingMealId, false)
+      } else {
+        await createMeal(userId, entry.meal, false)
+      }
+      dequeueMeal(entry.meal.id)
+      resolveOptimisticMeal(entry.meal.id)
+      anySaved = true
+      if (DEBUG_MEALS) console.log('[OFFLINE_QUEUE] synced', { mealId: entry.meal.id })
+    } catch (err) {
+      // Leave in queue — will retry on next drain attempt
+      if (DEBUG_MEALS) console.log('[OFFLINE_QUEUE] retry later', { mealId: entry.meal.id, err })
+    }
+  }
+
+  if (anySaved) emitMealsUpdated()
 }
 
 
@@ -657,9 +822,9 @@ export async function getMealsByDate(
  * Native iOS: fetch meals via Cloud Function (getMealsForDate) using Capacitor auth token.
  * Firestore Web SDK doesn't work on native because JS Firebase Auth isn't synced.
  */
-async function getMealsByDateNative(_userId: string, dateKey: string): Promise<Meal[]> {
+async function getMealsByDateNative(userId: string, dateKey: string): Promise<Meal[]> {
   try {
-    let token = await getCapacitorToken()
+    let token = await getCapacitorToken(userId)
     const endpoint = getCFEndpoint('getMealsForDate')
 
     if (DEBUG_MEALS) console.log('[HOME_MEALS] native fetch', { dateKey })
@@ -676,7 +841,7 @@ async function getMealsByDateNative(_userId: string, dateKey: string): Promise<M
     // Retry once with fresh token on auth failure
     if (response.status === 401 || response.status === 403) {
       _cachedCapacitorToken = null
-      token = await getCapacitorToken()
+      token = await getCapacitorToken(userId)
       response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -738,7 +903,7 @@ export async function getMealHistory(
 
   // On native iOS, use Cloud Function (Firestore Web SDK auth not synced)
   if (Capacitor.isNativePlatform()) {
-    return getMealHistoryNative(startDate, endDate)
+    return getMealHistoryNative(userId, startDate, endDate)
   }
 
   // Web path: Firestore Web SDK
@@ -772,9 +937,9 @@ export async function getMealHistory(
 /**
  * Native iOS: fetch meal history via getMealsForRange Cloud Function.
  */
-async function getMealHistoryNative(startDate: string, endDate: string): Promise<Meal[]> {
+async function getMealHistoryNative(userId: string, startDate: string, endDate: string): Promise<Meal[]> {
   try {
-    let token = await getCapacitorToken()
+    let token = await getCapacitorToken(userId)
     const endpoint = getCFEndpoint('getMealsForRange')
 
     if (DEBUG_MEALS) console.log('[HISTORY] native fetch', { startDate, endDate })
@@ -791,7 +956,7 @@ async function getMealHistoryNative(startDate: string, endDate: string): Promise
     // Retry once with fresh token on auth failure
     if (response.status === 401 || response.status === 403) {
       _cachedCapacitorToken = null
-      token = await getCapacitorToken()
+      token = await getCapacitorToken(userId)
       response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -881,7 +1046,7 @@ export async function deleteMeal(
   if (DEBUG_MEALS) console.log('[MEAL_DELETE] starting', { userId, mealId, native: Capacitor.isNativePlatform() })
 
   if (Capacitor.isNativePlatform()) {
-    await deleteMealNative(mealId)
+    await deleteMealNative(userId, mealId)
   } else {
     await deleteDoc(mealDoc(userId, mealId))
   }
@@ -893,8 +1058,8 @@ export async function deleteMeal(
 /**
  * Native iOS: delete meal via deleteMeal Cloud Function using Capacitor auth token.
  */
-async function deleteMealNative(mealId: string): Promise<void> {
-  let token = await getCapacitorToken()
+async function deleteMealNative(userId: string, mealId: string): Promise<void> {
+  let token = await getCapacitorToken(userId)
   const endpoint = getCFEndpoint('deleteMeal')
 
   if (DEBUG_MEALS) console.log('[MEAL_DELETE] native call starting', { mealId })
@@ -911,7 +1076,7 @@ async function deleteMealNative(mealId: string): Promise<void> {
   // Retry once with fresh token on auth failure
   if (response.status === 401 || response.status === 403) {
     _cachedCapacitorToken = null
-    token = await getCapacitorToken()
+    token = await getCapacitorToken(userId)
     response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },

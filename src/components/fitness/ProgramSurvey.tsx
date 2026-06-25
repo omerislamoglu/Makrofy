@@ -18,7 +18,7 @@ interface Question {
 }
 
 function getQuestions(locale: string): Question[] {
-  if (locale === 'en') {
+  if (locale !== 'tr') {
     return [
       {
         key: 'goal',
@@ -222,7 +222,7 @@ export default function ProgramSurvey({
   const [step, setStep] = useState(-1)
   const [answers, setAnswers] = useState<Partial<SurveyAnswers>>({})
 
-  const isEN = locale === 'en'
+  const isEN = locale !== 'tr'
   const QUESTIONS = getQuestions(locale)
 
   const select = (q: Question, value: string | number) => {

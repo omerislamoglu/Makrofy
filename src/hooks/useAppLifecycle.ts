@@ -9,6 +9,7 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
+import { showPendingStoreMessages } from '../services/revenueCatService'
 
 const isNative = Capacitor.isNativePlatform()
 
@@ -29,11 +30,15 @@ export function useAppLifecycle() {
   useEffect(() => {
     if (!isNative) return
 
+    let mounted = true
     let cleanup: (() => void) | undefined
 
     async function init() {
       try {
         const { App } = await import('@capacitor/app')
+
+        // Bileşen dynamic import tamamlanmadan unmount olduysa çık
+        if (!mounted) return
 
         // Android geri tuşu — ana sayfadaysa uygulamayı minimize et, değilse geri git
         const backHandler = await App.addListener('backButton', () => {
@@ -45,9 +50,12 @@ export function useAppLifecycle() {
         })
 
         // App resume — state yenileme için event dispatch
+        // isActive === true iken bekleyen StoreKit mesajlarını göster
+        // (shouldShowInAppMessagesAutomatically: false olduğundan manuel çağrı gerekir)
         const resumeHandler = await App.addListener('appStateChange', ({ isActive }) => {
           if (isActive) {
             window.dispatchEvent(new CustomEvent('app:resume'))
+            showPendingStoreMessages()
           } else {
             window.dispatchEvent(new CustomEvent('app:pause'))
           }
@@ -60,26 +68,36 @@ export function useAppLifecycle() {
             const parsed = new URL(url)
             const path = parsed.pathname || parsed.hostname
             if (path) {
-              navigateRef.current('/' + path.replace(/^\/+/, ''))
+              const normalized = path.replace(/^\/+/, '')
+              navigateRef.current(normalized === 'home' ? '/' : '/' + normalized)
             }
           } catch {
             // Geçersiz URL, sessizce geç
           }
         })
 
+        // Listener'lar kaydedilirken unmount olduysa hepsini hemen temizle
+        if (!mounted) {
+          backHandler.remove()
+          resumeHandler.remove()
+          urlHandler.remove()
+          return
+        }
+
         cleanup = () => {
           backHandler.remove()
           resumeHandler.remove()
           urlHandler.remove()
         }
-      } catch (err) {
-        console.warn('[AppLifecycle] Init error:', err)
+      } catch {
+        // Init hatası — native ortamda değilsek veya Capacitor yüklenmediyse sessizce geç
       }
     }
 
     init()
 
     return () => {
+      mounted = false
       cleanup?.()
     }
   }, [])

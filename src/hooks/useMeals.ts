@@ -8,11 +8,57 @@ import {
   createMeal,
   deleteMeal as removeMeal,
   buildDailySummaries,
+  drainOfflineQueueMeals,
 } from '../services/mealService'
 import { getToday } from '../utils/date'
+import { getOptimisticMeals } from '../services/optimisticMeals'
+import { getQueuedMealsForDate } from '../services/offlineQueue'
 
 const HISTORY_WINDOW_DAYS = 14
 const HISTORY_CACHE_TTL_MS = 60_000
+
+// ─── Today meals cache ──────────────────────────────────────────────────────
+// Keyed by `${userId}:${dateKey}`. Avoids the flash-of-zero on app open when
+// the Cloud Function fetch hasn't resolved yet (native iOS has no Firestore
+// offline cache because it uses HTTP calls instead of the Web SDK).
+const todayCache = new Map<string, { meals: Meal[]; macros: MacroNutrients; fetchedAt: number }>()
+
+// ─── Persistent localStorage cache ─────────────────────────────────────────
+// Survives app restarts — used as the initial state when the module cache is
+// empty and the network hasn't responded yet (i.e. first render while offline).
+const PERSIST_KEY = (cacheKey: string) => `makrofy_today_v2_${cacheKey}`
+
+function loadPersistedMeals(cacheKey: string): Meal[] | null {
+  try {
+    const raw = localStorage.getItem(PERSIST_KEY(cacheKey))
+    return raw ? (JSON.parse(raw) as Meal[]) : null
+  } catch {
+    return null
+  }
+}
+
+function persistTodayMeals(cacheKey: string, meals: Meal[]): void {
+  try {
+    localStorage.setItem(PERSIST_KEY(cacheKey), JSON.stringify(meals))
+  } catch {
+    // localStorage quota exceeded — ignore
+  }
+}
+
+/**
+ * Merge two meal lists by id, with `overlay` winning on duplicate ids, then
+ * sort newest-first by `createdAt` to match `getMealsByDate`'s ordering.
+ * Used to surface optimistic (in-flight) meals on top of fetched/cached ones.
+ */
+function mergeMealsById(base: Meal[], overlay: Meal[]): Meal[] {
+  if (overlay.length === 0) return base
+  const byId = new Map<string, Meal>()
+  for (const m of base) byId.set(m.id, m)
+  for (const m of overlay) byId.set(m.id, m)
+  return Array.from(byId.values()).sort((a, b) =>
+    String(b.createdAt).localeCompare(String(a.createdAt))
+  )
+}
 
 const historyCache = new Map<string, {
   meals: Meal[]
@@ -21,11 +67,30 @@ const historyCache = new Map<string, {
 }>()
 
 export function useTodayMeals(userId: string | undefined) {
-  const [meals, setMeals] = useState<Meal[]>([])
-  const [todayMacros, setTodayMacros] = useState<MacroNutrients>(EMPTY_MACROS)
-  const [loading, setLoading] = useState(true)
+  const today = getToday()
+  const cacheKey = userId ? `${userId}:${today}` : null
+  const initialCache = cacheKey ? todayCache.get(cacheKey) : undefined
+
+  // Initial meals: memory cache → localStorage → offline queue → empty
+  const [meals, setMeals] = useState<Meal[]>(() => {
+    if (initialCache?.meals) return initialCache.meals
+    const persisted = cacheKey ? loadPersistedMeals(cacheKey) : null
+    const queued = cacheKey ? getQueuedMealsForDate(today) : []
+    const base = persisted ?? []
+    return queued.length > 0 ? mergeMealsById(base, queued) : base
+  })
+  const [todayMacros, setTodayMacros] = useState<MacroNutrients>(() => {
+    if (initialCache?.macros) return initialCache.macros
+    const persisted = cacheKey ? loadPersistedMeals(cacheKey) : null
+    const queued = cacheKey ? getQueuedMealsForDate(today) : []
+    const base = persisted ?? []
+    const all = queued.length > 0 ? mergeMealsById(base, queued) : base
+    return all.length > 0 ? sumMacros(all.map((m) => m.totalMacros)) : EMPTY_MACROS
+  })
+  const [loading, setLoading] = useState(!initialCache)
   const [error, setError] = useState<string | null>(null)
   const mountedRef = useRef(true)
+  const mealsRef = useRef<Meal[]>(initialCache?.meals ?? [])
 
   useEffect(() => {
     mountedRef.current = true
@@ -34,7 +99,11 @@ export function useTodayMeals(userId: string | undefined) {
     }
   }, [])
 
-  const today = getToday()
+  // Keep a live ref of the current meals so `refresh` can merge optimistic
+  // meals on top of whatever is already on screen without re-creating itself.
+  useEffect(() => {
+    mealsRef.current = meals
+  }, [meals])
 
   const refresh = useCallback(async () => {
     if (!userId) {
@@ -45,18 +114,46 @@ export function useTodayMeals(userId: string | undefined) {
       setLoading(false)
       return
     }
-    setLoading(true)
+    const key = `${userId}:${today}`
+    // Show any optimistic (in-flight) meals immediately, before the network
+    // fetch resolves — this is what makes a saved meal appear single-tap fast.
+    const pending = getOptimisticMeals(today)
+    if (pending.length > 0) {
+      const merged = mergeMealsById(mealsRef.current, pending)
+      setMeals(merged)
+      setTodayMacros(sumMacros(merged.map((m) => m.totalMacros)))
+    }
+    // Only show the full-screen loading state when there is nothing to display
+    // yet (no cache, no optimistic meals). A background refresh must never hide
+    // already-visible content.
+    const hasCachedData = (todayCache.get(key)?.meals.length ?? 0) > 0
+    if (mealsRef.current.length === 0 && pending.length === 0 && !hasCachedData) {
+      setLoading(true)
+    }
     setError(null)
     try {
       const todayMeals = await getMealsByDate(userId, today)
       if (!mountedRef.current) return
-      setMeals(todayMeals)
-      setTodayMacros(sumMacros(todayMeals.map((m) => m.totalMacros)))
+      // Reconcile fetched (real) meals with any still-pending optimistic / queued ones.
+      const stillPending = getOptimisticMeals(today)
+      const queued = getQueuedMealsForDate(today)
+      const merged = mergeMealsById(todayMeals, [...queued, ...stillPending])
+      const macros = sumMacros(merged.map((m) => m.totalMacros))
+      setMeals(merged)
+      setTodayMacros(macros)
+      todayCache.set(key, { meals: merged, macros, fetchedAt: Date.now() })
+      // Persist to localStorage so the list is available on the next cold start
+      persistTodayMeals(key, merged)
     } catch (err) {
       if (!mountedRef.current) return
       console.error('[useTodayMeals] fetch failed', err)
-      setMeals([])
-      setTodayMacros(EMPTY_MACROS)
+      // Keep cached / persisted / offline-queued meals visible when offline.
+      const stillPending = getOptimisticMeals(today)
+      const queued = getQueuedMealsForDate(today)
+      const persisted = loadPersistedMeals(key) ?? []
+      const visible = mergeMealsById(persisted, [...queued, ...stillPending])
+      setMeals(visible)
+      setTodayMacros(sumMacros(visible.map((m) => m.totalMacros)))
       setError(err instanceof Error ? err.message : 'Could not load meals.')
     } finally {
       if (mountedRef.current) setLoading(false)
@@ -71,15 +168,31 @@ export function useTodayMeals(userId: string | undefined) {
     const handleRefresh = () => {
       void refresh()
     }
+    const handleResume = () => {
+      // On app resume, drain any queued offline saves if we're now online
+      if (userId && navigator.onLine) {
+        drainOfflineQueueMeals(userId).catch(() => {})
+      }
+      void refresh()
+    }
+    // When connectivity returns: drain the offline queue then refresh the list.
+    const handleOnline = () => {
+      if (userId) {
+        drainOfflineQueueMeals(userId).catch(() => {})
+      }
+      void refresh()
+    }
     window.addEventListener('makrofy:meals-updated', handleRefresh)
     window.addEventListener('focus', handleRefresh)
-    window.addEventListener('app:resume', handleRefresh)
+    window.addEventListener('app:resume', handleResume)
+    window.addEventListener('app:online', handleOnline)
     return () => {
       window.removeEventListener('makrofy:meals-updated', handleRefresh)
       window.removeEventListener('focus', handleRefresh)
-      window.removeEventListener('app:resume', handleRefresh)
+      window.removeEventListener('app:resume', handleResume)
+      window.removeEventListener('app:online', handleOnline)
     }
-  }, [refresh])
+  }, [refresh, userId])
 
   const addManualMeal = useCallback(
     async (data: MealFormData) => {

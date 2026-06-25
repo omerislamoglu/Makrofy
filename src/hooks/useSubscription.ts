@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Subscription, SubscriptionPlan } from '../types/subscription'
+import { Subscription, SubscriptionPlan, getPlanTier } from '../types/subscription'
 import {
   getSubscription,
   saveSubscription,
+  clearLocalSubscription,
   cancelSubscription,
   isProUserSync,
   purchaseSubscription,
@@ -14,17 +15,29 @@ import {
   type RCPackage,
   type PurchaseResult,
 } from '../services/subscriptionService'
+import { getStorePlaceholder } from '../services/revenueCatService'
+import { persistUserProfile } from '../services/authService'
 import { createId } from '../utils/id'
+import { Capacitor } from '@capacitor/core'
 
 export function useSubscription(userId: string | undefined) {
   const [subscription, setSubscription] = useState<Subscription | null>(() => {
     if (!userId) return null
     return getSubscription(userId)
   })
-  const [packages, setPackages] = useState<RCPackage[]>([])
-  const [loadingPackages, setLoadingPackages] = useState(false)
+  // Web'de mağazayı yer tutucu fiyatlarla anında doldur (demo amaçlı).
+  // Native'de ASLA yer tutucu fiyat gösterme — gerçek App Store fiyatları
+  // RevenueCat'ten gelene kadar boş kalır (loading), sonra gerçek paketler.
+  const [packages, setPackages] = useState<RCPackage[]>(() =>
+    Capacitor.isNativePlatform() ? [] : getStorePlaceholder()
+  )
+  const [loadingPackages, setLoadingPackages] = useState(() => Capacitor.isNativePlatform())
 
   const isPro = userId ? isProUserSync(userId) : false
+  // Default an unknown-but-paid plan to the lower paid tier ('plus'), never
+  // 'pro' — otherwise a Plus subscriber whose plan hasn't loaded yet would be
+  // shown Pro and granted Pro-only features (photo program, 5/5 scans).
+  const planTier = isPro ? getPlanTier(subscription?.plan || 'plus_monthly') : 'free'
 
   // Initialize RevenueCat & load offerings when userId is available
   useEffect(() => {
@@ -36,37 +49,77 @@ export function useSubscription(userId: string | undefined) {
       await initRevenueCat(userId!)
       await identifyUser(userId!)
 
-      try {
-        const sync = await syncSubscriptionStatus(userId!)
-        if (!cancelled && sync.isPro) {
-          const syncedSubscription: Subscription = {
-            id: `server_${userId}`,
-            userId: userId!,
-            plan: 'pro_yearly',
-            status: 'active',
-            platform: 'ios',
-            startedAt: new Date().toISOString(),
-            expiresAt: sync.expiresAt ?? null,
-            cancelledAt: null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          }
-          saveSubscription(userId!, syncedSubscription)
-          setSubscription(syncedSubscription)
-        }
-      } catch (err) {
-        console.warn('[useSubscription] Server subscription sync skipped:', err)
-      }
-
+      // Load store offerings and sync server status CONCURRENTLY — they are
+      // independent, and gating real prices behind the 1-3s server sync made the
+      // paywall show placeholder prices far longer than necessary.
       setLoadingPackages(true)
-      try {
-        const offerings = await getOfferings()
-        if (!cancelled) setPackages(offerings)
-      } catch (err) {
-        console.warn('[useSubscription] Failed to load offerings:', err)
-      } finally {
-        if (!cancelled) setLoadingPackages(false)
-      }
+
+      const offeringsPromise = getOfferings()
+        .then((offerings) => {
+          if (!cancelled) setPackages(offerings)
+        })
+        .catch((err) => {
+          console.warn('[useSubscription] Failed to load offerings:', err)
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingPackages(false)
+        })
+
+      const syncPromise = syncSubscriptionStatus(userId!)
+        .then((sync) => {
+          if (cancelled) return
+          if (sync.isPro) {
+            const syncedSubscription: Subscription = {
+              id: `server_${userId}`,
+              userId: userId!,
+              plan: sync.planTier === 'plus' ? 'plus_yearly' : 'pro_yearly',
+              status: 'active',
+              platform: 'ios',
+              startedAt: new Date().toISOString(),
+              expiresAt: sync.expiresAt ?? null,
+              cancelledAt: null,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }
+            saveSubscription(userId!, syncedSubscription)
+            setSubscription(syncedSubscription)
+          } else {
+            // The server is authoritative: it reports NO active entitlement
+            // (RevenueCat + Firestore checked, with a cached-paid fallback that
+            // already protects real subscribers from transient misses). So any
+            // local subscription is stale — clear it instead of leaving a Pro/
+            // Plus tier the user no longer holds (the source of "still shows Pro
+            // 5/5" after a sandbox/account change). Network failures throw and
+            // are handled below, so we never downgrade on a failed sync.
+            //
+            // Grace window: a JUST-purchased subscription can briefly precede
+            // RevenueCat's API propagation, so the server may momentarily miss
+            // it. Never clear a subscription created in the last 10 minutes —
+            // that protects a fresh purchase from a transient lookup lag. A
+            // genuinely-stale record is always hours/days old.
+            const local = getSubscription(userId!)
+            const created = local?.createdAt
+            const createdAtMs =
+              typeof created === 'string'
+                ? new Date(created).getTime()
+                : created && typeof created.toMillis === 'function'
+                  ? created.toMillis()
+                  : 0
+            const isRecentPurchase = createdAtMs > 0 && Date.now() - createdAtMs < 10 * 60 * 1000
+            if (!isRecentPurchase) {
+              clearLocalSubscription(userId!)
+              // Also clear the legacy profile pro flag so useScanLimit's bridge
+              // doesn't keep granting a paid scan limit to a now-free user.
+              persistUserProfile({ uid: userId!, isPro: false })
+              setSubscription(null)
+            }
+          }
+        })
+        .catch((err) => {
+          console.warn('[useSubscription] Server subscription sync skipped:', err)
+        })
+
+      await Promise.allSettled([offeringsPromise, syncPromise])
     }
 
     init()
@@ -106,7 +159,7 @@ export function useSubscription(userId: string | undefined) {
       if (!userId) return null
       const now = new Date().toISOString()
       const expiresAt = new Date()
-      const months = plan === 'pro_yearly' ? 12 : plan === 'pro_quarterly' ? 3 : 1
+      const months = plan.endsWith('_yearly') ? 12 : plan.endsWith('_quarterly') ? 3 : 1
       expiresAt.setMonth(expiresAt.getMonth() + months)
 
       const sub: Subscription = {
@@ -142,6 +195,7 @@ export function useSubscription(userId: string | undefined) {
   return {
     subscription,
     isPro,
+    planTier,
     packages,
     loadingPackages,
     purchase,

@@ -1,5 +1,16 @@
 import type { FoodCatalogCategory, FoodCatalogItem, FoodServingOption, FoodUnitType } from '../../types/food'
 
+type ServingUnitInput =
+  | FoodUnitType
+  | 'avuc'
+  | 'avuç'
+  | 'kasik'
+  | 'kaşık'
+  | 'yemek kaşığı'
+  | 'fincan'
+  | 'bardak'
+  | 'kase'
+
 function normalizeId(text: string): string {
   return text
     .replace(/İ/g, 'i')
@@ -18,15 +29,34 @@ function normalize(text: string): string {
     .replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
-function srv(label: string, unitType: FoodUnitType, gramEq?: number, mlEq?: number): FoodServingOption {
+function normalizeUnitType(unitType: ServingUnitInput): FoodUnitType {
+  if (unitType === 'fincan' || unitType === 'bardak') return 'ml'
+  if (
+    unitType === 'avuc' ||
+    unitType === 'avuç' ||
+    unitType === 'kasik' ||
+    unitType === 'kaşık' ||
+    unitType === 'yemek kaşığı' ||
+    unitType === 'kase'
+  ) {
+    return 'porsiyon'
+  }
+  return unitType
+}
+
+function srv(label: string, unitType: ServingUnitInput, gramEq?: number, mlEq?: number): FoodServingOption {
   const id = normalizeId(label)
+  const normalizedUnitType = normalizeUnitType(unitType)
+  const normalizedMlEq = normalizedUnitType === 'ml' ? mlEq ?? gramEq : mlEq
+  const normalizedGramEq = normalizedUnitType === 'ml' ? undefined : gramEq
+
   return {
     id,
     label,
-    unitType,
+    unitType: normalizedUnitType,
     quantity: 1,
-    ...(gramEq !== undefined && { gramEquivalent: gramEq }),
-    ...(mlEq !== undefined && { mlEquivalent: mlEq }),
+    ...(normalizedGramEq !== undefined && { gramEquivalent: normalizedGramEq }),
+    ...(normalizedMlEq !== undefined && { mlEquivalent: normalizedMlEq }),
   }
 }
 

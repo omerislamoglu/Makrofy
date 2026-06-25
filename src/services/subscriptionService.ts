@@ -1,4 +1,11 @@
-import { Subscription, SubscriptionPlan, ScanLimit, FREE_DAILY_SCAN_LIMIT, PRO_DAILY_SCAN_LIMIT } from '../types/subscription'
+import {
+  Subscription,
+  SubscriptionPlan,
+  ScanLimit,
+  FREE_DAILY_SCAN_LIMIT,
+  getDailyScanLimitForTier,
+  getPlanTier,
+} from '../types/subscription'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import {
   initRevenueCat,
@@ -25,11 +32,14 @@ export type { RCPackage, PurchaseResult }
 
 const STORAGE_KEY = 'makrofy_subscription'
 const DAILY_SCAN_KEY = 'makrofy_daily_scans'
+const EXTRA_SCAN_CREDITS_KEY = 'makrofy_extra_scan_credits'
 const FUNCTIONS_REGION = import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || 'us-central1'
 
 type SyncSubscriptionStatusResponse = {
   success: boolean
   isPro: boolean
+  planTier?: 'free' | 'plus' | 'pro'
+  dailyScanLimit?: number
   source: 'users' | 'subscriptions' | 'revenuecat' | 'none'
   expiresAt?: string | null
 }
@@ -38,15 +48,42 @@ type SyncSubscriptionStatusRequest = {
   revenueCatAppUserId?: string | null
 }
 
+type GrantScanPackRequest = {
+  productId: string
+  purchaseId?: string
+}
+
+type GrantScanPackResponse = {
+  success: boolean
+  productId: string
+  creditsAdded: number
+  totalCredits: number
+}
+
 // ─── Subscription CRUD ──────────────────────────────────────────────────────
 
 export function getSubscription(userId: string): Subscription | null {
   const stored = localStorage.getItem(`${STORAGE_KEY}_${userId}`)
-  return stored ? JSON.parse(stored) : null
+  if (!stored) return null
+  try {
+    return JSON.parse(stored) as Subscription
+  } catch {
+    return null
+  }
 }
 
 export function saveSubscription(userId: string, subscription: Subscription): void {
   localStorage.setItem(`${STORAGE_KEY}_${userId}`, JSON.stringify(subscription))
+}
+
+/**
+ * Hard-remove the locally cached subscription. Used when the authoritative
+ * server sync reports the user has NO active entitlement, so a stale Pro/Plus
+ * record (e.g. left over from prior sandbox testing or another account on the
+ * same device) can never keep showing a paid tier the user no longer holds.
+ */
+export function clearLocalSubscription(userId: string): void {
+  localStorage.removeItem(`${STORAGE_KEY}_${userId}`)
 }
 
 export async function syncSubscriptionStatus(userId: string): Promise<SyncSubscriptionStatusResponse> {
@@ -109,8 +146,13 @@ async function syncSubscriptionStatusNative(): Promise<SyncSubscriptionStatusRes
     throw new Error(`Subscription sync returned invalid JSON (HTTP ${response.status}).`)
   }
 
-  if (!response.ok || payload.error || !payload.result?.isPro) {
-    throw new Error(payload.error?.message || 'Active Pro subscription could not be verified.')
+  // Only throw on a genuine transport/server error. A successful response that
+  // reports isPro:false is NOT an error — it's the authoritative signal the
+  // caller uses to downgrade a stale local subscription. Throwing on not-pro
+  // (the old behavior) meant the client could never clear a leftover Pro/Plus
+  // record on device, so a wrong tier kept showing forever.
+  if (!response.ok || payload.error || !payload.result) {
+    throw new Error(payload.error?.message || `Subscription sync failed (HTTP ${response.status}).`)
   }
 
   return payload.result
@@ -123,6 +165,67 @@ async function requireServerSubscriptionSync(userId: string): Promise<void> {
   if (!status.isPro) {
     throw new Error('Active Pro subscription could not be verified on the server.')
   }
+}
+
+async function grantScanPackCredits(userId: string, productId: string): Promise<GrantScanPackResponse | null> {
+  if (isDemoMode) return null
+
+  if (Capacitor.isNativePlatform()) {
+    const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication')
+    const [{ user }, { token }] = await Promise.all([
+      FirebaseAuthentication.getCurrentUser(),
+      FirebaseAuthentication.getIdToken({ forceRefresh: true }),
+    ])
+
+    if (!user || !token) {
+      throw new Error('Please sign in to add scan credits.')
+    }
+
+    const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID
+    if (!projectId) {
+      throw new Error('Firebase project ID not configured.')
+    }
+
+    const endpoint = `https://${FUNCTIONS_REGION}-${projectId}.cloudfunctions.net/grantScanPack`
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        data: {
+          productId,
+          purchaseId: `${productId}_${Date.now()}`,
+        },
+      }),
+    })
+    const rawText = await response.text()
+    let payload: { result?: GrantScanPackResponse; error?: { message?: string } }
+    try {
+      payload = JSON.parse(rawText) as typeof payload
+    } catch {
+      throw new Error(`Scan credits grant returned invalid response (HTTP ${response.status}).`)
+    }
+    if (!response.ok || payload.error || !payload.result?.success) {
+      throw new Error(payload.error?.message || 'Scan credits could not be added.')
+    }
+    return payload.result
+  }
+
+  if (!auth.currentUser) {
+    throw new Error('Please sign in to add scan credits.')
+  }
+
+  const grantScanPack = httpsCallable<GrantScanPackRequest, GrantScanPackResponse>(
+    getFunctions(app, FUNCTIONS_REGION),
+    'grantScanPack'
+  )
+  const response = await grantScanPack({
+    productId,
+    purchaseId: `${productId}_${userId}_${Date.now()}`,
+  })
+  return response.data
 }
 
 export async function isProUser(userId: string): Promise<boolean> {
@@ -155,7 +258,7 @@ export function activateSubscription(
 ): Subscription {
   const now = new Date().toISOString()
   const expiresAt = new Date()
-  const planMonths = plan === 'pro_yearly' ? 12 : plan === 'pro_quarterly' ? 3 : 1
+  const planMonths = plan.endsWith('_yearly') ? 12 : plan.endsWith('_quarterly') ? 3 : 1
   expiresAt.setMonth(expiresAt.getMonth() + planMonths)
 
   const subscription: Subscription = {
@@ -191,6 +294,45 @@ export function cancelSubscription(userId: string): void {
 }
 
 /**
+ * Reconcile the backend subscription mirror in the background, retrying a few
+ * times with backoff. Used after a successful RevenueCat purchase/restore: the
+ * client-side StoreKit receipt (validated by RevenueCat) is authoritative, but
+ * the Firebase mirror can lag a few seconds behind RevenueCat's webhook. We must
+ * never block the unlock or show a "failed" screen on that lag — so this runs
+ * fire-and-forget and just keeps trying until the server agrees.
+ */
+function reconcileServerSubscriptionInBackground(userId: string, maxAttempts = 4): void {
+  let attempt = 0
+  const run = () => {
+    attempt += 1
+    requireServerSubscriptionSync(userId)
+      .then(() => {
+        if (import.meta.env.DEV) console.log('[Subscription] Server sync reconciled', { attempt })
+      })
+      .catch((err) => {
+        if (attempt < maxAttempts) {
+          setTimeout(run, Math.min(2000 * attempt, 8000))
+        } else {
+          console.warn('[Subscription] Server sync still pending after purchase/restore:', err)
+        }
+      })
+  }
+  run()
+}
+
+function grantScanPackCreditsInBackground(userId: string, productId: string, optimisticCredits: number): void {
+  grantScanPackCredits(userId, productId)
+    .then((grant) => {
+      const confirmedCredits = grant?.creditsAdded ?? optimisticCredits
+      const delta = confirmedCredits - optimisticCredits
+      if (delta !== 0) addExtraScanCredits(userId, delta)
+    })
+    .catch((err) => {
+      console.warn('[Subscription] Scan pack server grant still pending after purchase:', err)
+    })
+}
+
+/**
  * Purchase a subscription via RevenueCat (native) or mock (web).
  * This is the primary purchase method — it replaces the old mock-only flow.
  */
@@ -200,20 +342,27 @@ export async function purchaseSubscription(
 ): Promise<PurchaseResult> {
   const result = await purchasePackage(planOrPackageId)
 
+  if (result.success && result.scanCredits && result.productId) {
+    if (Capacitor.isNativePlatform()) {
+      addExtraScanCredits(userId, result.scanCredits)
+      grantScanPackCreditsInBackground(userId, result.productId, result.scanCredits)
+      return result
+    }
+
+    const grant = await grantScanPackCredits(userId, result.productId)
+    addExtraScanCredits(userId, grant?.creditsAdded ?? result.scanCredits)
+    return {
+      ...result,
+      scanCredits: grant?.creditsAdded ?? result.scanCredits,
+    }
+  }
+
   if (result.success && result.subscription) {
     // Persist locally for offline / quick access
     saveSubscription(userId, result.subscription)
-    try {
-      await requireServerSubscriptionSync(userId)
-    } catch (err) {
-      console.error('[Subscription] Server sync failed after purchase:', err)
-      return {
-        success: false,
-        isPro: false,
-        subscription: result.subscription,
-        error: err instanceof Error ? err.message : 'Pro subscription could not be verified on the server.',
-      }
-    }
+    // RevenueCat has already confirmed the StoreKit purchase. Do not block the
+    // UI on the Firebase mirror; it can lag behind the webhook/API by seconds.
+    reconcileServerSubscriptionInBackground(userId)
   }
 
   return result
@@ -227,17 +376,7 @@ export async function restorePurchase(userId: string): Promise<PurchaseResult> {
 
   if (result.success && result.subscription) {
     saveSubscription(userId, result.subscription)
-    try {
-      await requireServerSubscriptionSync(userId)
-    } catch (err) {
-      console.error('[Subscription] Server sync failed after restore:', err)
-      return {
-        success: false,
-        isPro: false,
-        subscription: result.subscription,
-        error: err instanceof Error ? err.message : 'Pro subscription could not be verified on the server.',
-      }
-    }
+    reconcileServerSubscriptionInBackground(userId)
   }
 
   return result
@@ -279,10 +418,14 @@ export function getDailyScanCount(userId: string): number {
   const stored = localStorage.getItem(`${DAILY_SCAN_KEY}_${userId}`)
   if (!stored) return 0
 
-  const data: DailyScanData = JSON.parse(stored)
-  // Gün değiştiyse sıfırla
-  if (data.date !== getTodayKey()) return 0
-  return data.count
+  try {
+    const data: DailyScanData = JSON.parse(stored)
+    // Gün değiştiyse sıfırla
+    if (data.date !== getTodayKey()) return 0
+    return data.count
+  } catch {
+    return 0
+  }
 }
 
 function incrementDailyScanCount(userId: string): number {
@@ -294,10 +437,29 @@ function incrementDailyScanCount(userId: string): number {
   return updated
 }
 
+export function getExtraScanCredits(userId: string): number {
+  const raw = localStorage.getItem(`${EXTRA_SCAN_CREDITS_KEY}_${userId}`)
+  const value = raw ? Number.parseInt(raw, 10) : 0
+  return Number.isFinite(value) ? Math.max(0, value) : 0
+}
+
+export function addExtraScanCredits(userId: string, credits: number): number {
+  const next = getExtraScanCredits(userId) + Math.max(0, Math.floor(credits))
+  localStorage.setItem(`${EXTRA_SCAN_CREDITS_KEY}_${userId}`, String(next))
+  return next
+}
+
+export function decrementExtraScanCredit(userId: string): number {
+  const next = Math.max(0, getExtraScanCredits(userId) - 1)
+  localStorage.setItem(`${EXTRA_SCAN_CREDITS_KEY}_${userId}`, String(next))
+  return next
+}
+
 export function getDailyScansRemaining(userId: string): number {
-  const isPro = isProUserSync(userId)
+  const subscription = getSubscription(userId)
+  const tier = getPlanTier(subscription?.plan)
   const used = getDailyScanCount(userId)
-  return Math.max(0, (isPro ? PRO_DAILY_SCAN_LIMIT : FREE_DAILY_SCAN_LIMIT) - used)
+  return Math.max(0, getDailyScanLimitForTier(tier) - used)
 }
 
 /** Get the number of free scans remaining for a user. */
@@ -309,24 +471,32 @@ export function getFreeScansRemaining(userId: string): number {
 // ─── Composite helpers ──────────────────────────────────────────────────────
 
 export function getScanLimit(userId: string): ScanLimit {
-  const isPro = isProUserSync(userId)
+  const subscription = getSubscription(userId)
+  // Unknown-but-paid → 'plus' (lower paid tier), never 'pro': a Plus subscriber
+  // must not be granted the Pro 5/5 scan limit on an unresolved plan.
+  const tier = isProUserSync(userId) ? getPlanTier(subscription?.plan || 'plus_monthly') : 'free'
   const dailyUsed = getDailyScanCount(userId)
+  const total = getDailyScanLimitForTier(tier)
+  const extraCredits = getExtraScanCredits(userId)
 
-  if (isPro) {
-    const remaining = Math.max(0, PRO_DAILY_SCAN_LIMIT - dailyUsed)
+  if (tier !== 'free') {
+    const dailyRemaining = Math.max(0, total - dailyUsed)
+    const remaining = dailyRemaining + extraCredits
     return {
       used: dailyUsed,
-      total: PRO_DAILY_SCAN_LIMIT,
+      total: total + extraCredits,
       remaining,
+      extraCredits,
       isLimited: remaining <= 0,
     }
   }
 
-  const remaining = Math.max(0, FREE_DAILY_SCAN_LIMIT - dailyUsed)
+  const remaining = Math.max(0, FREE_DAILY_SCAN_LIMIT - dailyUsed) + extraCredits
   return {
     used: dailyUsed,
-    total: FREE_DAILY_SCAN_LIMIT,
+    total: FREE_DAILY_SCAN_LIMIT + extraCredits,
     remaining,
+    extraCredits,
     isLimited: remaining <= 0,
   }
 }

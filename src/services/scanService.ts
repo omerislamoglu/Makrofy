@@ -3,11 +3,10 @@ import type { AIScanResult, ScanErrorCode } from '../types/scan'
 import type { FoodItem } from '../types/meal'
 import type { MealType } from '../types/meal'
 import { getFunctions, httpsCallable } from 'firebase/functions'
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
-import { app, auth, isDemoMode, storage } from './firebase'
+import { app, auth, isDemoMode } from './firebase'
 import { Capacitor } from '@capacitor/core'
 import { getToday } from '../utils/date'
-import { createId } from '../utils/id'
+import { getCurrentRevenueCatAppUserId } from './revenueCatService'
 
 // ─── Constants ────────────────────────────────────────────────────────────
 
@@ -83,13 +82,23 @@ type AnalyzeMealFunctionResponse = {
   }
 }
 
+type AnalyzeMealRequestPayload = {
+  imageUrl?: string
+  imageData?: string
+  mealTypeHint?: MealType
+  gramNotes?: string
+  dateKey?: string
+  locale?: string
+  revenueCatAppUserId?: string | null
+}
+
 // ─── Public API ────────────────────────────────────────────────────────────
 
 /**
  * Analyze a meal image and return detected food items with macros.
  *
- * Web: uploads to Firebase Storage, calls httpsCallable with download URL.
- * Native iOS: sends compressed base64 directly to Cloud Function (no Storage).
+ * Web and native send the already-compressed image directly to the Cloud
+ * Function. This avoids a Storage upload/download roundtrip before AI analysis.
  */
 export async function analyzeMealImage(
   file: File,
@@ -109,30 +118,25 @@ export async function analyzeMealImage(
       return analyzeNativeWithIdToken(file, options)
     }
 
-    // ── Web path: Storage upload + httpsCallable ──
+    // ── Web path: direct compressed image + httpsCallable ──
     const user = auth.currentUser
     if (!user) {
       throw new ScanServiceError('analysis_failed', 'Please sign in to use AI analysis.')
     }
 
-    const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-    const path = `scans/${user.uid}/${Date.now()}-${createId()}.${extension}`
-    const imageRef = ref(storage, path)
-
-    await uploadBytes(imageRef, file, {
-      contentType: file.type || 'image/jpeg',
-      customMetadata: { userId: user.uid },
-    })
-
-    const imageUrl = await getDownloadURL(imageRef)
-    const analyze = httpsCallable<
-      { imageUrl: string; mealTypeHint?: MealType; gramNotes?: string; dateKey?: string; locale?: string },
-      AnalyzeMealFunctionResponse
-    >(getFunctions(app, FUNCTIONS_REGION), 'analyzeMealImage')
+    const analyze = httpsCallable<AnalyzeMealRequestPayload, AnalyzeMealFunctionResponse>(
+      getFunctions(app, FUNCTIONS_REGION),
+      'analyzeMealImage'
+    )
+    const [dataUrl, revenueCatAppUserId] = await Promise.all([
+      fileToDataUrl(file),
+      getCurrentRevenueCatAppUserId().catch(() => null),
+    ])
 
     const response = await analyze({
-      imageUrl,
+      imageData: dataUrl,
       dateKey: getToday(),
+      ...(revenueCatAppUserId && { revenueCatAppUserId }),
       ...(options.mealTypeHint && { mealTypeHint: options.mealTypeHint }),
       ...(options.gramNotes?.trim() && { gramNotes: options.gramNotes.trim() }),
       ...(options.locale && { locale: options.locale }),
@@ -155,9 +159,14 @@ export async function analyzeMealImage(
         case 'functions/unauthenticated':
           throw new ScanServiceError('analysis_failed', 'Please sign in to use AI analysis.')
         case 'functions/failed-precondition':
+        case 'functions/permission-denied':
           throw new ScanServiceError('analysis_failed', fbErr.message || 'AI analysis is available for Pro users only.')
         case 'functions/invalid-argument':
           throw new ScanServiceError('upload_failed', fbErr.message || 'Invalid request. Please try again.')
+        case 'functions/unavailable':
+          throw new ScanServiceError('analysis_failed', 'Service temporarily unavailable. Please try again in a moment.')
+        case 'functions/internal':
+          throw new ScanServiceError('analysis_failed', 'An internal error occurred. Please try again.')
         default:
           throw new ScanServiceError('analysis_failed', fbErr.message || 'Analysis failed. Please try again.')
       }
@@ -178,33 +187,35 @@ async function analyzeNativeWithIdToken(
 ): Promise<AIScanResult> {
   if (DEBUG_SCAN) console.log('[AI_SCAN] native path started', { fileName: file.name, fileSize: file.size, fileType: file.type })
 
-  // ── 1. Get Capacitor Firebase auth token ──
+  // ── 1. Prepare auth, image payload, and subscription id in parallel ──
   const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication')
-  const [{ user }, { token }] = await Promise.all([
-    FirebaseAuthentication.getCurrentUser(),
-    FirebaseAuthentication.getIdToken({ forceRefresh: false }),
+  const [[{ user }, { token }], dataUrl, revenueCatAppUserId] = await Promise.all([
+    Promise.all([
+      FirebaseAuthentication.getCurrentUser(),
+      FirebaseAuthentication.getIdToken({ forceRefresh: false }),
+    ]),
+    fileToDataUrl(file),
+    getCurrentRevenueCatAppUserId().catch(() => null),
   ])
 
   if (!user || !token) {
     throw new ScanServiceError('analysis_failed', 'Please sign in to use AI analysis.')
   }
   if (DEBUG_SCAN) console.log('[AI_SCAN] token received', { uid: user.uid, tokenLength: token.length })
-
-  // ── 2. Convert file to base64 data URL ──
-  const dataUrl = await fileToDataUrl(file)
   if (DEBUG_SCAN) console.log('[AI_SCAN] dataUrl length', { length: dataUrl.length, sizeKB: Math.round(dataUrl.length / 1024) })
 
-  // ── 3. Call Cloud Function with base64 payload ──
+  // ── 2. Call Cloud Function with base64 payload ──
   const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID
   if (!projectId) {
     throw new ScanServiceError('analysis_failed', 'Firebase project ID not configured.')
   }
   const endpoint = `https://${FUNCTIONS_REGION}-${projectId}.cloudfunctions.net/analyzeMealImage`
 
-  const requestBody = {
+  const requestBody: { data: AnalyzeMealRequestPayload } = {
     data: {
       imageData: dataUrl,
       dateKey: getToday(),
+      ...(revenueCatAppUserId && { revenueCatAppUserId }),
       ...(options.mealTypeHint && { mealTypeHint: options.mealTypeHint }),
       ...(options.gramNotes?.trim() && { gramNotes: options.gramNotes.trim() }),
       ...(options.locale && { locale: options.locale }),
@@ -243,6 +254,19 @@ async function analyzeNativeWithIdToken(
     })
     if (errName === 'AbortError') {
       throw new ScanServiceError('timeout', 'Analysis timed out after 120s. Please try again.')
+    }
+    // İnternet yoksa (navigator.onLine = false) veya hata mesajı bunu
+    // açıkça belirtiyorsa kullanıcıya özel "ağ yok" hatası göster.
+    const isOffline =
+      !navigator.onLine ||
+      errMsg.toLowerCase().includes('offline') ||
+      errMsg.toLowerCase().includes('network') ||
+      errMsg.toLowerCase().includes('connection') ||
+      errMsg.toLowerCase().includes('internet') ||
+      errMsg.toLowerCase().includes('host') ||
+      errMsg.toLowerCase().includes('unreachable')
+    if (isOffline) {
+      throw new ScanServiceError('network_error', 'No internet connection. Please check your network and try again.')
     }
     throw new ScanServiceError('analysis_failed', `Network error: ${errMsg}`)
   }
@@ -309,21 +333,31 @@ function fileToDataUrl(file: File): Promise<string> {
 }
 
 function mapFunctionAnalysis(response: AnalyzeMealFunctionResponse): AIScanResult {
-  const analysis = response.analysis
+  const analysis = response?.analysis
+
+  // AI backend'in response şeması değişirse veya kısmi yanıt gelirse
+  // AnalysisResultPage'de `.map()` crash'ini önle.
+  if (!analysis || !Array.isArray(analysis.items)) {
+    throw new ScanServiceError(
+      'analysis_failed',
+      'Unexpected response format from AI service. Please try again.'
+    )
+  }
+
   return {
     ...(analysis.mealName && { mealName: analysis.mealName }),
     items: analysis.items,
     totalMacros: {
-      calories: analysis.totalCalories,
-      protein: analysis.protein,
-      carbs: analysis.carbs,
-      fat: analysis.fat,
-      fiber: analysis.fiber,
+      calories: analysis.totalCalories ?? 0,
+      protein: analysis.protein ?? 0,
+      carbs: analysis.carbs ?? 0,
+      fat: analysis.fat ?? 0,
+      fiber: analysis.fiber ?? 0,
     },
-    confidence: analysis.confidence,
-    confidenceScore: analysis.confidenceScore,
-    suggestedMealType: analysis.suggestedMealType,
-    processingTimeMs: analysis.processingTimeMs,
+    confidence: analysis.confidence ?? 'low',
+    confidenceScore: analysis.confidenceScore ?? 0,
+    suggestedMealType: analysis.suggestedMealType ?? 'lunch',
+    processingTimeMs: analysis.processingTimeMs ?? 0,
     modelVersion: analysis.modelVersion,
     clarificationQuestions: analysis.clarificationQuestions,
     warnings: analysis.warnings,

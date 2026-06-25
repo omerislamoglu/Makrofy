@@ -37,6 +37,12 @@ export interface UserProfile extends User {
   mealReminders: boolean
   weeklySummary: boolean
   promoNotifs: boolean
+  // Notification preferences (A, B2, B4, C6, D7, D8)
+  calorieReminder?: boolean   // A  — daily calorie budget reminder
+  streakReminder?: boolean    // B2 — streak reminder if no meal logged
+  dailyMotivation?: boolean   // B4 — morning motivation with daily target
+  workoutReminder?: boolean   // D7 — workout day reminder on training days
+  evaluationReminder?: boolean // D8 — 2-week evaluation/check-in reminder
   dateKey: string // "YYYY-MM-DD" of last activity — useful for daily reset logic
   bodyMetrics?: BodyMetrics
   hasExistingPlan?: boolean      // did user say they already have a diet plan?

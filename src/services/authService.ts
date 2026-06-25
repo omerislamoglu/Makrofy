@@ -16,6 +16,9 @@ import { getFunctions, httpsCallable } from 'firebase/functions'
 import { app, auth, isDemoMode } from './firebase'
 import { UserProfile, DailyGoal } from '../types/user'
 import { logOutRevenueCat } from './revenueCatService'
+import { clearNativeMealAuthCache } from './mealService'
+import { clearOptimisticMeals } from './optimisticMeals'
+import { clearOfflineQueue } from './offlineQueue'
 
 const FUNCTIONS_REGION = import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || 'us-central1'
 
@@ -110,6 +113,13 @@ export async function signInWithApple() {
 }
 
 export async function signOut() {
+  // Drop the previous account's cached native auth token and any in-flight
+  // optimistic meals so the next user can never see leftover data (the native
+  // meal Cloud Functions resolve the uid from the cached token).
+  clearNativeMealAuthCache()
+  clearOptimisticMeals()
+  clearOfflineQueue()
+
   try {
     await logOutRevenueCat()
   } catch (err) {
@@ -177,6 +187,9 @@ export async function deleteAccount(userId: string): Promise<void> {
   }
 
   removeLocalUserProfile(userId)
+  clearNativeMealAuthCache()
+  clearOptimisticMeals()
+  clearOfflineQueue()
 
   try {
     await logOutRevenueCat()
@@ -233,6 +246,11 @@ export function getUserProfile(firebaseUser: FirebaseUser): UserProfile {
     mealReminders: extra.mealReminders ?? false,
     weeklySummary: extra.weeklySummary ?? true,
     promoNotifs: extra.promoNotifs ?? false,
+    calorieReminder: extra.calorieReminder ?? true,
+    streakReminder: extra.streakReminder ?? true,
+    dailyMotivation: extra.dailyMotivation ?? true,
+    workoutReminder: extra.workoutReminder ?? true,
+    evaluationReminder: extra.evaluationReminder ?? true,
     dateKey: extra.dateKey ?? today,
     bodyMetrics: extra.bodyMetrics ?? undefined,
   }
@@ -241,7 +259,14 @@ export function getUserProfile(firebaseUser: FirebaseUser): UserProfile {
 export function persistUserProfile(profile: Partial<UserProfile> & { uid: string }) {
   const key = STORAGE_KEY_PREFIX + profile.uid
   const existing = localStorage.getItem(key)
-  const current = existing ? JSON.parse(existing) : {}
+  let current: Record<string, unknown> = {}
+  if (existing) {
+    try {
+      current = JSON.parse(existing)
+    } catch {
+      current = {}
+    }
+  }
   const updated = { ...current, ...profile }
   localStorage.setItem(key, JSON.stringify(updated))
 }

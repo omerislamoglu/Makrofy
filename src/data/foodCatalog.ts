@@ -7,6 +7,15 @@ import { GLOBAL_FOODS } from './globalFoods'
 import { GLOBAL_MARKET_PRODUCTS } from './globalMarketProducts'
 import { GLOBAL_RESTAURANT_ITEMS } from './globalRestaurantItems'
 import { MASSIVE_GLOBAL_EXPANSION } from './massiveGlobalExpansion'
+import { GLOBAL_EXPANSION_MEGA } from './globalExpansionMega'
+import { GLOBAL_EXPANSION_2 } from './globalExpansion2'
+import { GLOBAL_EXPANSION_3 } from './globalExpansion3'
+import { GLOBAL_FOOD_I18N } from './globalFoodI18n'
+import { ENGLISH_REGIONAL_FOODS } from './englishRegionalFoods'
+import { REGIONAL_FOODS_DE } from './regionalFoodsDE'
+import { REGIONAL_FOODS_FR } from './regionalFoodsFR'
+import { REGIONAL_FOODS_ES } from './regionalFoodsES'
+import { REGIONAL_FOODS_IT } from './regionalFoodsIT'
 import type { AppLocale } from '../i18n'
 
 const GLOBAL_CATALOG: FoodCatalogItem[] = [
@@ -14,6 +23,9 @@ const GLOBAL_CATALOG: FoodCatalogItem[] = [
   ...GLOBAL_MARKET_PRODUCTS,
   ...GLOBAL_RESTAURANT_ITEMS,
   ...MASSIVE_GLOBAL_EXPANSION,
+  ...GLOBAL_EXPANSION_MEGA,
+  ...GLOBAL_EXPANSION_2,
+  ...GLOBAL_EXPANSION_3,
 ]
 
 export const FOOD_CATEGORIES: Array<FoodCatalogCategory | 'Tümü'> = [
@@ -184,12 +196,49 @@ function toCatalogFood(food: TurkishFood): FoodCatalogItem {
  * - 'en': Global foods + custom foods (no Turkish-only items)
  * - undefined: defaults to Turkish for backward compatibility
  */
+type LocalizableLocale = 'de' | 'fr' | 'es' | 'it'
+
+/** Region-specific food pools layered on top of the shared global catalog. */
+const REGIONAL_FOODS: Record<LocalizableLocale, FoodCatalogItem[]> = {
+  de: REGIONAL_FOODS_DE,
+  fr: REGIONAL_FOODS_FR,
+  es: REGIONAL_FOODS_ES,
+  it: REGIONAL_FOODS_IT,
+}
+
+/**
+ * Returns a locale-localized clone of a global food item when a translation
+ * exists. Display name is overridden; aliases + searchableText are merged so
+ * BOTH the native query and the original English query keep matching.
+ */
+function localizeGlobalItem(item: FoodCatalogItem, locale: LocalizableLocale): FoodCatalogItem {
+  const t = GLOBAL_FOOD_I18N[item.id]?.[locale]
+  if (!t) return item
+  const aliases = Array.from(
+    new Set([...(t.aliases ?? []), item.name, ...item.aliases]),
+  )
+  return {
+    ...item,
+    name: t.name,
+    aliases,
+    searchableText: normalizeFoodText([t.name, ...aliases, item.searchableText].join(' ')),
+  }
+}
+
 export function getFoodCatalog(locale?: AppLocale): FoodCatalogItem[] {
   const custom = getCustomCatalogFoods()
 
-  if (locale === 'en') {
-    const globalFoods = GLOBAL_CATALOG
-    return [...globalFoods, ...custom]
+  if (locale !== 'tr') {
+    if (locale === 'de' || locale === 'fr' || locale === 'es' || locale === 'it') {
+      // Region-specific local products first, then the localized shared global catalog.
+      return [
+        ...REGIONAL_FOODS[locale],
+        ...GLOBAL_CATALOG.map((f) => localizeGlobalItem(f, locale)),
+        ...custom,
+      ]
+    }
+    // English source of truth plus US/UK verified regional foods.
+    return [...ENGLISH_REGIONAL_FOODS, ...GLOBAL_CATALOG, ...custom]
   }
 
   // Turkish (default)
@@ -239,5 +288,5 @@ export const POPULAR_FOOD_IDS_EN = [
 export const POPULAR_FOOD_IDS = POPULAR_FOOD_IDS_TR
 
 export function getPopularFoodIds(locale?: AppLocale): string[] {
-  return locale === 'en' ? POPULAR_FOOD_IDS_EN : POPULAR_FOOD_IDS_TR
+  return locale !== 'tr' ? POPULAR_FOOD_IDS_EN : POPULAR_FOOD_IDS_TR
 }

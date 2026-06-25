@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Home, Plus, Clock, Dumbbell, User, LucideIcon } from 'lucide-react'
 import { motion } from 'framer-motion'
@@ -24,6 +25,15 @@ export default function BottomNav() {
   const haptics = useHaptics()
   const { strings } = useLocale()
 
+  // Start invisible, become visible after layout stabilises (safe areas, etc.).
+  // The splash screen covers everything for ~2.4 s anyway, so the user never
+  // sees the invisible → visible transition.
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    const timer = setTimeout(() => setReady(true), 150)
+    return () => clearTimeout(timer)
+  }, [])
+
   const handleNavPress = (path: string) => {
     if (location.pathname === path) return
     haptics.selectionChanged()
@@ -31,12 +41,16 @@ export default function BottomNav() {
   }
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50">
+    <nav
+      className={`fixed bottom-0 left-0 right-0 md:left-64 z-50 transition-opacity duration-300 ${
+        ready ? 'opacity-100' : 'opacity-0 pointer-events-none'
+      }`}
+    >
       {/* Gradient fade above nav */}
       <div className="h-6 bg-gradient-to-t from-black to-transparent pointer-events-none" />
 
       <div className="bg-zinc-950/90 backdrop-blur-2xl border-t border-zinc-800/40 bottom-nav-safe">
-        <div className="flex justify-around items-center h-[60px] max-w-lg mx-auto px-2">
+        <div className="flex justify-around items-center h-[50px] max-w-lg mx-auto px-2">
           {NAV_ITEMS.map(({ path, icon: Icon, labelKey }) => {
             const isActive = location.pathname === path
             const label = strings.nav[labelKey]
@@ -45,36 +59,18 @@ export default function BottomNav() {
               <motion.button
                 key={path}
                 onClick={() => handleNavPress(path)}
-                whileTap={{ scale: 0.96 }}
+                whileTap={{ scale: 0.9 }}
                 transition={{ duration: 0.06, ease: 'easeOut' }}
-                className="relative flex flex-col items-center justify-center w-14 h-12 rounded-xl touch-manipulation select-none"
+                aria-label={label}
+                className="relative flex items-center justify-center flex-1 min-w-0 h-full rounded-xl touch-manipulation select-none"
               >
-                {isActive && (
-                  <motion.div
-                    layoutId="bottomnav-active"
-                    className="absolute -top-px left-1/2 -translate-x-1/2 w-5 h-[2px] rounded-full bg-white"
-                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                  />
-                )}
-                <motion.div
-                  animate={isActive ? { scale: 1.05, y: -1 } : { scale: 1, y: 0 }}
-                  transition={{ duration: 0.1, ease: 'easeOut' }}
-                >
-                  <Icon
-                    size={21}
-                    className={`transition-colors duration-200 ${
-                      isActive ? 'text-white' : 'text-zinc-500'
-                    }`}
-                    strokeWidth={isActive ? 2.5 : 1.5}
-                  />
-                </motion.div>
-                <span
-                  className={`text-[9px] mt-0.5 tracking-wide transition-colors duration-200 ${
-                    isActive ? 'text-white font-semibold' : 'text-zinc-500'
+                <Icon
+                  size={26}
+                  className={`transition-colors duration-200 ${
+                    isActive ? 'text-white' : 'text-zinc-500'
                   }`}
-                >
-                  {label}
-                </span>
+                  strokeWidth={isActive ? 2.4 : 1.8}
+                />
               </motion.button>
             )
           })}

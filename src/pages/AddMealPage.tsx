@@ -37,7 +37,8 @@ import {
   Lock,
 } from 'lucide-react'
 import { restaurants, type Restaurant, type RestaurantMenuItem } from '../data/restaurantMenus'
-import { getFoodCatalog, getPopularFoodIds } from '../data/foodCatalog'
+import { globalRestaurants } from '../data/globalRestaurantMenus'
+import { useFoodCatalog } from '../hooks/useFoodCatalog'
 import type { FoodCatalogCategory, FoodCatalogItem, FoodServingOption, FoodUnitType } from '../types/food'
 import { calculateFoodSelection } from '../utils/foodCalculation'
 import {
@@ -54,7 +55,7 @@ import { calculateMacrosForWeight, sumMacros } from '../types/nutrition'
 import { useAuth } from '../hooks/useAuth'
 import { useScanLimit } from '../hooks/useScanLimit'
 import { createId } from '../utils/id'
-import { createMeal } from '../services/mealService'
+import { createMealOptimistic } from '../services/mealService'
 import { analyzeMealImage, ScanServiceError } from '../services/scanService'
 import { compressImageForAI } from '../utils/imageCompression'
 import { getToday } from '../utils/date'
@@ -415,6 +416,7 @@ function ImagePreview({
             value={gramNotes}
             onChange={(e) => onGramNotesChange(e.target.value)}
             placeholder={ap.gramInfoPlaceholder}
+            maxLength={1500}
             rows={2}
             className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-[13px] text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600/30 transition-all duration-200 resize-none"
           />
@@ -617,8 +619,7 @@ function FoodSearchResults({
   suggestions: FoodCatalogItem[]
   onSelect: (food: FoodCatalogItem) => void
 }) {
-  const { strings, locale } = useLocale()
-  const isEN = locale === 'en'
+  const { strings } = useLocale()
   if (query.trim().length < 2) return null
 
   return (
@@ -646,7 +647,7 @@ function FoodSearchResults({
               <div className="text-right flex-shrink-0">
                 <p className="text-[12px] text-zinc-200 font-semibold tabular-nums">{food.calories} kcal</p>
                 <p className="text-[9px] text-zinc-500">
-                  {isEN ? 'P' : 'P'} {food.protein} · {isEN ? 'C' : 'K'} {food.carbs} · {isEN ? 'F' : 'Y'} {food.fat}
+                  {strings.addPage.macroP} {food.protein} · {strings.addPage.macroC} {food.carbs} · {strings.addPage.macroF} {food.fat}
                 </p>
               </div>
             </button>
@@ -788,7 +789,7 @@ function TabSwitcher({ mode, onChange, isPro }: { mode: AddMode; onChange: (m: A
             id={`tab-${tab.value}`}
             onClick={() => onChange(tab.value)}
             className={`
-              flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl text-[11px] font-medium relative
+              flex-1 min-w-0 flex flex-col items-center justify-center gap-1 py-2.5 rounded-xl text-[11px] font-medium tracking-tight relative
               transition-all duration-200 active:scale-[0.98]
               ${isActive
                 ? 'bg-white text-black shadow-sm'
@@ -796,10 +797,10 @@ function TabSwitcher({ mode, onChange, isPro }: { mode: AddMode; onChange: (m: A
               }
             `}
           >
-            <Icon size={14} />
-            {tab.label}
+            <Icon size={16} className="shrink-0" />
+            <span className="truncate max-w-full px-1">{tab.label}</span>
             {tab.isLocked && (
-              <span className="absolute top-1.5 right-1.5 text-zinc-400">
+              <span className="absolute top-1 right-1 text-zinc-400">
                 <Lock size={10} />
               </span>
             )}
@@ -828,8 +829,10 @@ function RestaurantTab({
   onSaveCart: (items: RestaurantCartItem[]) => Promise<void>
   saving: boolean
 }) {
-  const { strings } = useLocale()
+  const { strings, locale } = useLocale()
   const ap = strings.addPage
+  // Non-Turkish locales browse the international (English) chain list; TR keeps its local chains.
+  const restaurantList = locale !== 'tr' ? globalRestaurants : restaurants
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [cart, setCart] = useState<Record<string, RestaurantCartItem>>({})
@@ -968,7 +971,7 @@ function RestaurantTab({
     const isSearching = normalizedQuery.length >= 2
 
     const allResults = isSearching
-      ? restaurants.flatMap((r) =>
+      ? restaurantList.flatMap((r) =>
           r.categories.flatMap((c) =>
             c.items
               .filter((item) => item.name.toLowerCase().includes(normalizedQuery))
@@ -979,7 +982,7 @@ function RestaurantTab({
 
     // Restoran adıyla eşleşenler (ör. "komagene" → Komagene restoranı)
     const matchedRestaurants = isSearching
-      ? restaurants.filter((r) => r.name.toLowerCase().includes(normalizedQuery))
+      ? restaurantList.filter((r) => r.name.toLowerCase().includes(normalizedQuery))
       : []
 
     return (
@@ -1089,7 +1092,7 @@ function RestaurantTab({
         {/* Restoran kartları */}
         {searchQuery.trim().length < 2 && (
           <div className="grid grid-cols-2 gap-3">
-            {restaurants.map((r, i) => (
+            {restaurantList.map((r, i) => (
               <motion.button
                 key={r.id}
                 initial={{ opacity: 0, y: 12 }}
@@ -1250,8 +1253,7 @@ function RestaurantMenuItemRow({
   onAdd: () => void
   onRemove: () => void
 }) {
-  const { locale } = useLocale()
-  const isEN = locale === 'en'
+  const { strings } = useLocale()
   return (
     <div className="flex items-center gap-3 px-4 py-3">
       <div className="flex-1 min-w-0">
@@ -1264,9 +1266,9 @@ function RestaurantMenuItemRow({
         )}
         <div className="flex gap-2.5 mt-1.5">
           <span className="text-[11px] text-zinc-300 font-semibold tabular-nums">{item.calories} kcal</span>
-          <span className="text-[10px] text-zinc-500 tabular-nums">P {item.protein}g</span>
-          <span className="text-[10px] text-zinc-500 tabular-nums">{isEN ? 'C' : 'K'} {item.carbs}g</span>
-          <span className="text-[10px] text-zinc-500 tabular-nums">{isEN ? 'F' : 'Y'} {item.fat}g</span>
+          <span className="text-[10px] text-zinc-500 tabular-nums">{strings.addPage.macroP} {item.protein}g</span>
+          <span className="text-[10px] text-zinc-500 tabular-nums">{strings.addPage.macroC} {item.carbs}g</span>
+          <span className="text-[10px] text-zinc-500 tabular-nums">{strings.addPage.macroF} {item.fat}g</span>
         </div>
       </div>
       <AnimatePresence mode="wait">
@@ -1336,9 +1338,8 @@ function ParsedItemCard({
   onUpdate: (index: number, updated: ResolvedFoodItem) => void
   onRemove: (index: number) => void
 }) {
-  const { strings, locale } = useLocale()
+  const { strings } = useLocale()
   const ap = strings.addPage
-  const isEN = locale === 'en'
   const [expanded, setExpanded] = useState(false)
   const [editQty, setEditQty] = useState(String(item.token.quantity))
 
@@ -1382,7 +1383,7 @@ function ParsedItemCard({
         <div className="text-right flex-shrink-0">
           <p className="text-[13px] text-zinc-200 font-semibold tabular-nums">{item.macros.calories} kcal</p>
           <p className="text-[9px] text-zinc-500 tabular-nums">
-            {isEN ? 'P' : 'P'}{item.macros.protein} · {isEN ? 'C' : 'K'}{item.macros.carbs} · {isEN ? 'F' : 'Y'}{item.macros.fat}
+            {ap.macroP}{item.macros.protein} · {ap.macroC}{item.macros.carbs} · {ap.macroF}{item.macros.fat}
           </p>
         </div>
         <ChevronDown size={14} className={`text-zinc-500 transition-transform duration-200 flex-shrink-0 ${expanded ? 'rotate-180' : ''}`} />
@@ -1478,7 +1479,8 @@ function ClarifyTextFoodModal({
   onClose: () => void
   onConfirm: (serving: FoodServingOption, quantity: number) => void
 }) {
-  const { locale } = useLocale()
+  const { strings } = useLocale()
+  const ap = strings.addPage
   const [quantity, setQuantity] = useState('1')
   const servings = useMemo(() => item ? preferredClarificationServings(item) : [], [item])
   const [selectedServingId, setSelectedServingId] = useState<string | null>(null)
@@ -1493,19 +1495,15 @@ function ClarifyTextFoodModal({
   const selectedServing = servings.find((serving) => serving.id === selectedServingId) ?? servings[0] ?? item.match.defaultServing
   const parsedQuantity = parseFloat(quantity.replace(',', '.'))
   const canConfirm = Number.isFinite(parsedQuantity) && parsedQuantity > 0
-  const title = locale === 'en'
-    ? `How much ${item.match.name}?`
-    : `${item.match.name} ne kadar?`
-  const description = locale === 'en'
-    ? 'Pick the serving and quantity so the calories are counted correctly.'
-    : 'Kaloriyi doğru hesaplamak için servis ve miktarı seç.'
+  const title = ap.servingQuestion(item.match.name)
+  const description = ap.servingQuestionSub
 
   return (
     <Modal open={open} onClose={onClose} title={title} description={description} size="md">
       <div className="space-y-4">
         <div>
           <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-medium mb-2">
-            {locale === 'en' ? 'Serving' : 'Servis'}
+            {ap.servingLabel}
           </p>
           <div className="grid grid-cols-2 gap-2">
             {servings.map((serving) => {
@@ -1534,7 +1532,7 @@ function ClarifyTextFoodModal({
 
         <div>
           <label className="block text-[10px] text-zinc-500 uppercase tracking-widest font-medium mb-2">
-            {locale === 'en' ? 'Quantity' : 'Adet / miktar'}
+            {ap.quantityLabel}
           </label>
           <input
             type="number"
@@ -1554,7 +1552,7 @@ function ClarifyTextFoodModal({
             onClick={onClose}
             className="flex-1 h-11 rounded-xl bg-zinc-800 text-zinc-300 text-[13px] font-semibold hover:bg-zinc-700 transition-colors"
           >
-            {locale === 'en' ? 'Cancel' : 'Vazgeç'}
+            {strings.common.cancel}
           </button>
           <button
             type="button"
@@ -1564,7 +1562,7 @@ function ClarifyTextFoodModal({
             }}
             className="flex-1 h-11 rounded-xl bg-white text-black text-[13px] font-semibold disabled:opacity-50 transition-colors"
           >
-            {locale === 'en' ? 'Apply' : 'Uygula'}
+            {ap.applyButton}
           </button>
         </div>
       </div>
@@ -1597,19 +1595,7 @@ function TextEntryTab({
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const textExamples = locale === 'en' ? [
-    '2 boiled eggs, 1 slice of toast',
-    '200g grilled chicken with rice',
-    '1 Big Mac, medium fries',
-    '3 pieces sushi and green tea',
-    '1 protein shake',
-  ] : [
-    '2 haşlanmış yumurta, 1 dilim ekmek',
-    '200 gram tavuk göğsü ve 150 gram pilav',
-    '1 porsiyon mercimek çorbası, 1 ayran',
-    '1 hamburger, orta boy patates kızartması',
-    '3 parça sushi ve 1 bardak yeşil çay',
-  ]
+  const textExamples = strings.addPage.textExamples
 
   // Auto-resize textarea
   const resizeTextarea = useCallback(() => {
@@ -1689,7 +1675,9 @@ function TextEntryTab({
     setSaving(true)
     setSaveError(null)
     try {
-      await createMeal(userId, {
+      // Optimistic save: meal appears on the home screen instantly; the real
+      // write runs in the background (failures surface a global toast).
+      createMealOptimistic(userId, {
         mealType,
         source: 'manual',
         notes: inputText.trim().slice(0, 200),
@@ -2069,11 +2057,16 @@ export default function AddMealPage() {
       if (!result) return // kullanıcı iptal etti
       // previewUrl: convertFileSrc(webPath) — büyük base64 yok
       setPreviewUrl(result.previewUrl)
-    } catch {
-      setScanError(strings.addPage.cameraFailed)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg === 'PERMISSION_DENIED_CAMERA') {
+        setScanError(strings.addPage.cameraPermissionDenied)
+      } else {
+        setScanError(strings.addPage.cameraFailed)
+      }
       haptics.notificationError()
     }
-  }, [guardScan, camera, haptics, setPreviewUrl])
+  }, [guardScan, camera, haptics, setPreviewUrl, strings.addPage])
 
   /** Capacitor Camera — galeriden seç */
   const handlePickGallery = useCallback(async () => {
@@ -2084,11 +2077,16 @@ export default function AddMealPage() {
       const result = await camera.pickFromGallery()
       if (!result) return
       setPreviewUrl(result.previewUrl)
-    } catch {
-      setScanError(strings.addPage.galleryFailed)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg === 'PERMISSION_DENIED_GALLERY') {
+        setScanError(strings.addPage.galleryPermissionDenied)
+      } else {
+        setScanError(strings.addPage.galleryFailed)
+      }
       haptics.notificationError()
     }
-  }, [guardScan, camera, haptics, setPreviewUrl])
+  }, [guardScan, camera, haptics, setPreviewUrl, strings.addPage])
 
   /** Web drag & drop fallback — dosya ile de çalışır */
   const processFile = useCallback(
@@ -2125,7 +2123,16 @@ export default function AddMealPage() {
     haptics.impactMedium()
     try {
       // 1) Sıkıştır — orijinal büyük görüntü memory'den atılır
-      const compressed = await compressImageForAI(imagePreview)
+      // Bozuk/okunamayan görüntü için lokalize hata döndür
+      let compressed: Awaited<ReturnType<typeof compressImageForAI>>
+      try {
+        compressed = await compressImageForAI(imagePreview)
+      } catch {
+        setScanError(strings.addPage.fileReadError)
+        setAnalyzing(false)
+        haptics.notificationError()
+        return
+      }
 
       if (import.meta.env.DEV) {
         console.debug('[handleAnalyze] image compression', {
@@ -2157,22 +2164,25 @@ export default function AddMealPage() {
         state: { result, imagePreview: compressed.dataUrl, gramNotes },
       })
     } catch (err) {
-      const errMsg = err instanceof ScanServiceError
-        ? err.message
-        : err instanceof Error
-          ? err.message
-          : strings.addPage.analysisFailed
       console.error('[handleAnalyze] CATCH', {
         name: (err as Error)?.name,
         message: (err as Error)?.message,
         code: (err as ScanServiceError)?.code,
         stack: (err as Error)?.stack,
       })
+      // network_error kodu → lokalize "İnternet bağlantısı yok" mesajı
+      const errMsg = err instanceof ScanServiceError && err.code === 'network_error'
+        ? strings.addPage.networkError
+        : err instanceof ScanServiceError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : strings.addPage.analysisFailed
       setScanError(errMsg)
       setAnalyzing(false)
       haptics.notificationError()
     }
-  }, [imagePreview, guardScan, consumeScan, navigate, gramNotes, haptics, strings.addPage.analysisFailed])
+  }, [imagePreview, guardScan, consumeScan, navigate, gramNotes, locale, haptics, strings.addPage])
 
   // ══════════════════════════════════════════════════════════════════════
   // MANUAL STATE
@@ -2183,7 +2193,7 @@ export default function AddMealPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [restaurantSaving, setRestaurantSaving] = useState(false)
-  const foodCatalog = useMemo<FoodCatalogItem[]>(() => getFoodCatalog(locale), [locale])
+  const { catalog: foodCatalog, popularIds } = useFoodCatalog()
   const [recentIds, setRecentIds] = useState<string[]>(() => getRecentFoodIds())
   const [selectedFood, setSelectedFood] = useState<FoodCatalogItem | null>(null)
   const [activeServingLabel, setActiveServingLabel] = useState('')
@@ -2225,11 +2235,11 @@ export default function AddMealPage() {
   const foodSuggestions = useMemo(() => {
     const query = form.foodName.trim()
     if (query.length < 2) return []
-    return searchFoodCatalog(foodCatalog, query, locale === 'en' ? 'All' : 'Tümü', 30, {
+    return searchFoodCatalog(foodCatalog, query, locale !== 'tr' ? 'All' : 'Tümü', 30, {
       recentIds,
-      popularIds: getPopularFoodIds(locale),
+      popularIds,
     })
-  }, [foodCatalog, form.foodName, recentIds])
+  }, [foodCatalog, popularIds, locale, form.foodName, recentIds])
 
   const handleFoodSuggestion = useCallback(
     (food: FoodCatalogItem) => {
@@ -2311,7 +2321,9 @@ export default function AddMealPage() {
       const selectedQuantity = parseNum(formForSave.quantity)
       const equivalentAmount = computeEquivalentAmount(formForSave)
       const gramsForSave = computeTotalGrams(formForSave)
-      await createMeal(user.uid, {
+      // Optimistic: meal appears on Home instantly; network write runs in the
+      // background and surfaces a toast on failure.
+      createMealOptimistic(user.uid, {
         mealType: formForSave.mealType,
         source: 'manual',
         items: [
@@ -2376,7 +2388,9 @@ export default function AddMealPage() {
         const totalMacros = sumMacros(expandedItems.map((item) => item.macros))
         const restaurantNames = [...new Set(cartItems.map((entry) => entry.restaurantName))]
 
-        await createMeal(user.uid, {
+        // Optimistic save: meal appears on the home screen instantly; the real
+        // write runs in the background (failures surface a global toast).
+        createMealOptimistic(user.uid, {
           mealType: suggestMealType(),
           source: 'manual',
           notes: restaurantNames.join(', '),

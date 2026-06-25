@@ -25,7 +25,7 @@ import type { ConfidenceLevel, MealType } from '../types/meal'
 import { sumMacros } from '../types/nutrition'
 import { useAuth } from '../hooks/useAuth'
 import { useLocale } from '../contexts/LocaleContext'
-import { getSaveErrorMessage, saveAIScanMeal, serializeError } from '../services/mealService'
+import { getSaveErrorMessage, saveAIScanMealOptimistic, serializeError } from '../services/mealService'
 import { getToday } from '../utils/date'
 import { createId } from '../utils/id'
 import Card from '../components/ui/Card'
@@ -781,13 +781,14 @@ export default function AnalysisResultPage() {
         dateKey: normalizedMeal.dateKey,
       })
 
-      // Always save — analyzeMealImage no longer creates a meal document
-      const meal = await saveAIScanMeal(user.uid, normalizedMeal)
-      if (import.meta.env.DEV) console.log('[AI_SAVE] saveAIScanMeal returned', { mealId: meal.id })
+      // Optimistic save: the meal shows on the home screen instantly and the
+      // real write runs in the background. A failed write removes the optimistic
+      // meal and surfaces a toast (handled globally by ToastHost).
+      const meal = saveAIScanMealOptimistic(user.uid, normalizedMeal)
+      if (import.meta.env.DEV) console.log('[AI_SAVE] optimistic meal', { mealId: meal.id })
 
       setSaved(true)
       isSavingRef.current = false
-      window.dispatchEvent(new CustomEvent('makrofy:meals-updated'))
       if (import.meta.env.DEV) console.log('[AI_SAVE] navigating home')
       navigate('/', { replace: true, state: { refreshMeals: Date.now() } })
     } catch (error) {
@@ -872,6 +873,23 @@ export default function AnalysisResultPage() {
         {/* ── Warnings banner ────────────────────────────────── */}
         {initialResult.warnings && initialResult.warnings.length > 0 && (
           <WarningsBanner warnings={initialResult.warnings} />
+        )}
+
+        {/* ── Accuracy transparency note ──────────────────────── */}
+        {initialResult.accuracyNote && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.1 }}
+            className="bg-zinc-900/40 rounded-xl px-4 py-3 mb-5 border border-zinc-800/40"
+          >
+            <div className="flex items-start gap-2.5">
+              <Info size={13} className="text-zinc-500 mt-0.5 flex-shrink-0" />
+              <p className="text-[11px] text-zinc-400 leading-relaxed">
+                {initialResult.accuracyNote}
+              </p>
+            </div>
+          </motion.div>
         )}
 
         {/* ── Meal image preview ──────────────────────────────── */}

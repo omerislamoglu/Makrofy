@@ -374,7 +374,7 @@ export function generateDiet(
   a: DietSurveyAnswers,
   target: { calories: number; protein: number; carbs: number; fat: number }
 ): Diet {
-  const isEN = a.locale === 'en'
+  const isEN = a.locale !== 'tr'
   const lang = isEN ? 'en' : 'tr'
   const cal = target.calories
   const ratio = STYLE_RATIO[a.style]

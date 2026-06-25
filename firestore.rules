@@ -32,7 +32,22 @@ service cloud.firestore {
     // written by Cloud Functions (which bypass security rules via the
     // Admin SDK). Clients must never touch them.
     function serverManagedUserFields() {
-      return ['isPro', 'freeScansRemaining', 'scanCount'];
+      return [
+        'isPro',
+        'freeScansRemaining',
+        'scanCount',
+        'aiScanDate',
+        'aiScanDailyCount',
+        'aiScanDailyLimit',
+        'aiScanCredits',
+        'aiScanCreditsPurchased',
+        'aiScanCreditsUsed',
+        'aiScanLastCreditUsedAt',
+        'planTier',
+        'proSource',
+        'proExpiresAt',
+        'revenueCatAppUserId'
+      ];
     }
 
     // Safe profile fields that users are allowed to update.
@@ -99,7 +114,7 @@ service cloud.firestore {
       // Server-managed fields must be set to their safe defaults.
       allow create: if isOwner(userId)
                     && request.resource.data.isPro == false
-                    && request.resource.data.freeScansRemaining == 3
+                    && request.resource.data.freeScansRemaining == 0
                     && request.resource.data.scanCount == 0;
 
       // Users can update safe profile fields only.
@@ -166,6 +181,24 @@ service cloud.firestore {
 
         // Users can delete their own weekly logs.
         allow delete: if isOwner(userId);
+      }
+
+      // ── AI Programs — users/{userId}/aiPrograms/{programId} ───────
+
+      match /aiPrograms/{programId} {
+
+        // Users can read their own AI-generated programs.
+        allow read: if isOwner(userId);
+
+        // AI programs are generated and updated only by Cloud Functions.
+        allow create, update, delete: if false;
+      }
+
+      // ── Scan Credit Purchases — server only ────────────────────────
+
+      match /scanCreditPurchases/{purchaseId} {
+        allow read: if isOwner(userId);
+        allow create, update, delete: if false;
       }
 
       // ── Custom Foods — users/{userId}/customFoods/{foodId} ─────────

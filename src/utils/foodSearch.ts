@@ -53,6 +53,40 @@ const COMMON_MISSPELLINGS: Record<string, string> = {
   protien: 'protein', protin: 'protein', protine: 'protein',
   straberry: 'strawberry', stawberry: 'strawberry',
   bluberry: 'blueberry', bluebarry: 'blueberry',
+  // German food typos (corrected forms feed the multilingual synonym map)
+  hanchen: 'hahnchen', hahchen: 'hahnchen', hnchen: 'hahnchen',
+  hun: 'huhn',
+  fleish: 'fleisch', flesich: 'fleisch', fleisc: 'fleisch',
+  kaes: 'kase', kse: 'kase',
+  brto: 'brot',
+  kartofel: 'kartoffel', katoffel: 'kartoffel', kartofeln: 'kartoffel',
+  nudln: 'nudeln',
+  apfl: 'apfel', aplel: 'apfel',
+  gemse: 'gemuse',
+  joghrt: 'joghurt', jogurt: 'joghurt',
+  schoklade: 'schokolade', schokoade: 'schokolade',
+  // French food typos
+  poullet: 'poulet', poluet: 'poulet', poulett: 'poulet',
+  boef: 'boeuf', beouf: 'boeuf',
+  fromaje: 'fromage', fromge: 'fromage', frommage: 'fromage',
+  pome: 'pomme', pommme: 'pomme',
+  poson: 'poisson', poisons: 'poisson',
+  oef: 'oeuf', euf: 'oeuf',
+  fraisse: 'fraise', fraize: 'fraise',
+  legme: 'legume', legums: 'legume',
+  // Spanish food typos
+  poyo: 'pollo', pllo: 'pollo',
+  keso: 'queso', qeso: 'queso', quezo: 'queso',
+  uevo: 'huevo', huebo: 'huevo', guevo: 'huevo',
+  pescao: 'pescado', pscado: 'pescado',
+  mananza: 'manzana', manzna: 'manzana',
+  jamn: 'jamon', jaom: 'jamon',
+  aroz: 'arroz', arros: 'arroz',
+  // Italian food typos
+  formagio: 'formaggio', fromaggio: 'formaggio', formaggo: 'formaggio',
+  ouvo: 'uovo',
+  rriso: 'riso', rizo: 'riso',
+  prosciuto: 'prosciutto', prociutto: 'prosciutto',
 }
 
 function correctMisspelling(text: string): string {
@@ -292,16 +326,163 @@ const SYNONYMS: Record<string, string[]> = {
   starbucks: ['sbux', 'latte', 'frappuccino'],
 }
 
+// ─── Çok dilli yiyecek sözlüğü (FR / DE / ES / IT → katalog terimleri) ─────────
+// Katalogdaki yiyecek adları İngilizce/Türkçe. Fransa/Almanya/İspanya/İtalya'daki
+// kullanıcılar kendi dillerinde yazınca da bulabilmeleri için, her yaygın yiyeceği
+// 4 dildeki karşılıklarıyla katalogdaki İngilizce/Türkçe terime eşliyoruz.
+// `words` aksansız-normalize edilmiş biçimde yazılır (normalizeFoodText ile aynı).
+// Aynı kelime birden çok grupta geçse bile builder onları birleştirir.
+const FOOD_TRANSLATIONS: Array<{ words: string[]; targets: string[] }> = [
+  // ── Et & Protein ──
+  { words: ['poulet', 'huhn', 'hahnchen', 'haehnchen', 'pollo'], targets: ['chicken', 'tavuk'] },
+  { words: ['boeuf', 'rind', 'rindfleisch', 'ternera', 'res', 'manzo'], targets: ['beef', 'dana', 'et'] },
+  { words: ['viande', 'fleisch', 'carne'], targets: ['meat', 'et'] },
+  { words: ['porc', 'schwein', 'schweinefleisch', 'cerdo', 'maiale'], targets: ['pork', 'domuz'] },
+  { words: ['agneau', 'lamm', 'cordero', 'agnello'], targets: ['lamb', 'kuzu'] },
+  { words: ['dinde', 'pute', 'truthahn', 'pavo', 'tacchino'], targets: ['turkey', 'hindi'] },
+  { words: ['poisson', 'fisch', 'pescado', 'pesce'], targets: ['fish', 'balik'] },
+  { words: ['saumon', 'lachs', 'salmone'], targets: ['salmon', 'somon'] },
+  { words: ['thon', 'thunfisch', 'atun', 'tonno'], targets: ['tuna', 'ton baligi'] },
+  { words: ['crevette', 'crevettes', 'garnele', 'garnelen', 'gamba', 'gambas', 'camaron', 'gambero', 'gamberi', 'gamberetto'], targets: ['shrimp', 'karides'] },
+  { words: ['oeuf', 'oeufs', 'ei', 'eier', 'huevo', 'huevos', 'uovo', 'uova'], targets: ['egg', 'yumurta'] },
+  { words: ['jambon', 'schinken', 'jamon', 'prosciutto'], targets: ['ham', 'jambon'] },
+  { words: ['saucisse', 'wurst', 'salchicha', 'salsiccia'], targets: ['sausage', 'sosis', 'sucuk'] },
+  { words: ['bacon', 'speck', 'tocino', 'pancetta', 'lard'], targets: ['bacon', 'pastirma'] },
+  { words: ['steak', 'bistec', 'filete', 'bistecca'], targets: ['steak', 'biftek'] },
+  { words: ['boulette', 'frikadelle', 'albondiga', 'albondigas', 'polpetta', 'polpette'], targets: ['meatball', 'kofte'] },
+  { words: ['tofu'], targets: ['tofu'] },
+  // ── Süt ürünleri ──
+  { words: ['lait', 'milch', 'leche', 'latte'], targets: ['milk', 'sut'] },
+  { words: ['fromage', 'kase', 'kaese', 'queso', 'formaggio'], targets: ['cheese', 'peynir'] },
+  { words: ['yaourt', 'joghurt', 'yogur', 'yogurt'], targets: ['yogurt'] },
+  { words: ['beurre', 'butter', 'mantequilla', 'burro'], targets: ['butter', 'tereyagi'] },
+  { words: ['creme', 'sahne', 'nata', 'crema', 'panna'], targets: ['cream', 'krema', 'kaymak'] },
+  // ── Tahıl & Karbonhidrat ──
+  { words: ['pain', 'brot', 'pan', 'pane'], targets: ['bread', 'ekmek'] },
+  { words: ['riz', 'reis', 'arroz', 'riso'], targets: ['rice', 'pirinc', 'pilav'] },
+  { words: ['pates', 'nudeln', 'nudel', 'pasta'], targets: ['pasta', 'makarna'] },
+  { words: ['spaghetti', 'spaghettis'], targets: ['spaghetti', 'makarna'] },
+  { words: ['pomme de terre', 'patate', 'kartoffel', 'kartoffeln', 'patata', 'papa', 'patatas'], targets: ['potato', 'patates'] },
+  { words: ['avoine', 'hafer', 'haferflocken', 'avena'], targets: ['oatmeal', 'oats', 'yulaf'] },
+  { words: ['farine', 'mehl', 'harina', 'farina'], targets: ['flour', 'un'] },
+  { words: ['mais', 'maiz'], targets: ['corn', 'misir'] },
+  { words: ['couscous', 'cuscus'], targets: ['couscous', 'kuskus'] },
+  // ── Meyveler ──
+  { words: ['pomme', 'apfel', 'aepfel', 'manzana', 'mela', 'mele'], targets: ['apple', 'elma'] },
+  { words: ['banane', 'platano', 'banana'], targets: ['banana', 'muz'] },
+  { words: ['naranja', 'arancia', 'arance'], targets: ['orange', 'portakal'] },
+  { words: ['fraise', 'fraises', 'erdbeere', 'erdbeeren', 'fresa', 'fresas', 'fragola', 'fragole'], targets: ['strawberry', 'cilek'] },
+  { words: ['raisin', 'traube', 'trauben', 'weintraube', 'uva', 'uvas'], targets: ['grape', 'uzum'] },
+  { words: ['poire', 'birne', 'pera', 'birne'], targets: ['pear', 'armut'] },
+  { words: ['peche', 'pfirsich', 'melocoton', 'durazno', 'pesca'], targets: ['peach', 'seftali'] },
+  { words: ['cerise', 'cerises', 'kirsche', 'kirschen', 'cereza', 'cerezas', 'ciliegia', 'ciliegie'], targets: ['cherry', 'kiraz'] },
+  { words: ['pasteque', 'wassermelone', 'sandia', 'anguria', 'cocomero'], targets: ['watermelon', 'karpuz'] },
+  { words: ['melon', 'melone', 'melon'], targets: ['melon', 'kavun'] },
+  { words: ['citron', 'zitrone', 'limon', 'limone'], targets: ['lemon', 'limon'] },
+  { words: ['ananas', 'pina'], targets: ['pineapple', 'ananas'] },
+  { words: ['kiwi'], targets: ['kiwi'] },
+  { words: ['mangue', 'mango'], targets: ['mango'] },
+  { words: ['abricot', 'aprikose', 'albaricoque', 'albicocca'], targets: ['apricot', 'kayisi'] },
+  { words: ['figue', 'feige', 'higo', 'fico'], targets: ['fig', 'incir'] },
+  { words: ['grenade', 'granatapfel', 'granada', 'melagrana', 'melograno'], targets: ['pomegranate', 'nar'] },
+  { words: ['prune', 'pflaume', 'ciruela', 'prugna', 'susina'], targets: ['plum', 'erik'] },
+  { words: ['framboise', 'framboises', 'himbeere', 'frambuesa', 'lampone', 'lamponi'], targets: ['raspberry', 'ahududu'] },
+  { words: ['myrtille', 'myrtilles', 'blaubeere', 'heidelbeere', 'arandano', 'mirtillo', 'mirtilli'], targets: ['blueberry', 'yaban mersini'] },
+  { words: ['avocat', 'aguacate', 'avocado'], targets: ['avocado', 'avokado'] },
+  // ── Sebzeler ──
+  { words: ['legume', 'legumes', 'gemuse', 'gemuese', 'verdura', 'verduras', 'verdure', 'ortaggio'], targets: ['vegetable', 'sebze'] },
+  { words: ['tomate', 'pomodoro', 'pomodori'], targets: ['tomato', 'domates'] },
+  { words: ['concombre', 'gurke', 'pepino', 'cetriolo'], targets: ['cucumber', 'salatalik'] },
+  { words: ['carotte', 'carottes', 'karotte', 'mohre', 'moehre', 'zanahoria', 'carota', 'carote'], targets: ['carrot', 'havuc'] },
+  { words: ['oignon', 'zwiebel', 'cebolla', 'cipolla'], targets: ['onion', 'sogan'] },
+  { words: ['ail', 'knoblauch', 'ajo', 'aglio'], targets: ['garlic', 'sarimsak'] },
+  { words: ['poivron', 'paprika', 'pimiento', 'peperone'], targets: ['pepper', 'biber'] },
+  { words: ['brocoli', 'brokkoli', 'broccoli', 'broccolo'], targets: ['broccoli', 'brokoli'] },
+  { words: ['epinard', 'epinards', 'spinat', 'espinaca', 'espinacas', 'spinaci', 'spinacio'], targets: ['spinach', 'ispanak'] },
+  { words: ['laitue', 'lechuga', 'lattuga'], targets: ['lettuce', 'marul'] },
+  { words: ['champignon', 'champignons', 'pilz', 'pilze', 'champinon', 'seta', 'hongo', 'fungo', 'funghi'], targets: ['mushroom', 'mantar'] },
+  { words: ['aubergine', 'berenjena', 'melanzana', 'melanzane'], targets: ['eggplant', 'patlican'] },
+  { words: ['courgette', 'zucchini', 'calabacin', 'zucchina', 'zucchine', 'zucchino'], targets: ['zucchini', 'kabak'] },
+  { words: ['chou', 'kohl', 'col', 'repollo', 'cavolo'], targets: ['cabbage', 'lahana'] },
+  { words: ['chou fleur', 'blumenkohl', 'coliflor', 'cavolfiore'], targets: ['cauliflower', 'karnabahar'] },
+  { words: ['petit pois', 'pois', 'erbse', 'erbsen', 'guisante', 'guisantes', 'pisello', 'piselli'], targets: ['peas', 'bezelye'] },
+  { words: ['haricot', 'haricots', 'bohne', 'bohnen', 'frijol', 'frijoles', 'judia', 'alubia', 'fagiolo', 'fagioli'], targets: ['beans', 'fasulye'] },
+  { words: ['citrouille', 'potiron', 'kurbis', 'kuerbis', 'calabaza', 'zucca'], targets: ['pumpkin', 'balkabagi'] },
+  // ── Kuruyemiş ──
+  { words: ['amande', 'amandes', 'mandel', 'mandeln', 'almendra', 'almendras', 'mandorla', 'mandorle'], targets: ['almond', 'badem'] },
+  { words: ['noix', 'walnuss', 'nuez', 'nueces', 'noce', 'noci'], targets: ['walnut', 'ceviz'] },
+  { words: ['noisette', 'noisettes', 'haselnuss', 'avellana', 'nocciola', 'nocciole'], targets: ['hazelnut', 'findik'] },
+  { words: ['cacahuete', 'cacahuetes', 'erdnuss', 'erdnusse', 'mani', 'arachide', 'arachidi', 'nocciolina'], targets: ['peanut', 'fistik'] },
+  { words: ['noix de cajou', 'cajou', 'cashew', 'anacardo', 'anacardi'], targets: ['cashew', 'kaju'] },
+  { words: ['pistache', 'pistazie', 'pistacho', 'pistacchio', 'pistacchi'], targets: ['pistachio', 'antep fistigi'] },
+  // ── İçecekler ──
+  { words: ['eau', 'wasser', 'agua', 'acqua'], targets: ['water', 'su'] },
+  { words: ['cafe', 'kaffee', 'caffe'], targets: ['coffee', 'kahve'] },
+  { words: ['the', 'tee', 'te'], targets: ['tea', 'cay'] },
+  { words: ['jus', 'saft', 'zumo', 'jugo', 'succo'], targets: ['juice', 'meyve suyu'] },
+  { words: ['biere', 'bier', 'cerveza', 'birra'], targets: ['beer', 'bira'] },
+  { words: ['vin', 'wein', 'vino'], targets: ['wine', 'sarap'] },
+  // ── Tatlılar ──
+  { words: ['chocolat', 'schokolade', 'cioccolato', 'cioccolata'], targets: ['chocolate', 'cikolata'] },
+  { words: ['gateau', 'kuchen', 'pastel', 'tarta', 'torta', 'dolce'], targets: ['cake', 'kek', 'pasta'] },
+  { words: ['biscuit', 'biscuits', 'keks', 'galleta', 'galletas', 'biscotto', 'biscotti'], targets: ['cookie', 'kurabiye', 'biskuvi'] },
+  { words: ['glace', 'eis', 'helado', 'gelato'], targets: ['ice cream', 'dondurma'] },
+  { words: ['bonbon', 'bonbons', 'caramelo', 'dulce', 'caramella', 'caramelle'], targets: ['candy', 'seker'] },
+  { words: ['miel', 'honig', 'miele'], targets: ['honey', 'bal'] },
+  { words: ['confiture', 'marmelade', 'mermelada', 'marmellata'], targets: ['jam', 'recel'] },
+  { words: ['sucre', 'zucker', 'azucar', 'zucchero'], targets: ['sugar', 'seker'] },
+  // ── Yemekler ──
+  { words: ['soupe', 'suppe', 'sopa', 'zuppa', 'minestra'], targets: ['soup', 'corba'] },
+  { words: ['salade', 'salat', 'ensalada', 'insalata'], targets: ['salad', 'salata'] },
+  { words: ['sandwich', 'bocadillo', 'emparedado', 'panino', 'tramezzino'], targets: ['sandwich', 'sandvic', 'tost'] },
+  { words: ['frites', 'pommes', 'pommes frites', 'patatas fritas', 'papas fritas', 'patatine', 'patatine fritte'], targets: ['fries', 'french fries', 'patates kizartmasi'] },
+  { words: ['omelette', 'omelett', 'tortilla', 'frittata'], targets: ['omelette', 'omlet'] },
+  { words: ['pizza'], targets: ['pizza'] },
+  { words: ['hamburger', 'burger'], targets: ['burger', 'hamburger'] },
+  // ── Diğer ──
+  { words: ['huile', 'ol', 'oel', 'aceite', 'olio'], targets: ['oil', 'yag'] },
+  { words: ['huile d olive', 'olivenol', 'olivenoel', 'aceite de oliva', 'olio d oliva', 'olio di oliva'], targets: ['olive oil', 'zeytinyagi'] },
+  { words: ['sel', 'salz', 'sal', 'sale'], targets: ['salt', 'tuz'] },
+  { words: ['olive', 'olives', 'olive', 'aceituna', 'aceitunas', 'oliva', 'olive'], targets: ['olive', 'zeytin'] },
+  { words: ['lentille', 'lentilles', 'linse', 'linsen', 'lenteja', 'lentejas', 'lenticchia', 'lenticchie'], targets: ['lentil', 'mercimek'] },
+  { words: ['pois chiche', 'pois chiches', 'kichererbse', 'garbanzo', 'garbanzos', 'cece', 'ceci'], targets: ['chickpea', 'nohut'] },
+  { words: ['miel'], targets: ['honey', 'bal'] },
+]
+
+// FOOD_TRANSLATIONS'ı çalışma anında {kelime → hedefler} haritasına dönüştür.
+// Bir kelime birden çok grupta geçerse hedefler birleştirilir.
+const MULTILINGUAL_SYNONYMS: Record<string, string[]> = (() => {
+  const map: Record<string, string[]> = {}
+  for (const { words, targets } of FOOD_TRANSLATIONS) {
+    for (const word of words) {
+      const key = word // zaten normalize biçimde yazıldı
+      const existing = map[key] ?? []
+      map[key] = Array.from(new Set([...existing, ...targets, ...words.filter((w) => w !== word)]))
+    }
+  }
+  return map
+})()
+
+/** Bir terim için hem TR/EN hem çok dilli eş anlamlıları birleştirip döndürür. */
+function getMergedSynonyms(term: string): string[] {
+  const a = SYNONYMS[term] ?? []
+  const b = MULTILINGUAL_SYNONYMS[term] ?? []
+  if (a.length === 0) return b
+  if (b.length === 0) return a
+  return Array.from(new Set([...a, ...b]))
+}
+
 export function normalizeFoodText(text: string): string {
   return text
     .replace(/İ/g, 'i')
-    .toLowerCase()
     .replace(/ı/g, 'i')
-    .replace(/ğ/g, 'g')
-    .replace(/ü/g, 'u')
-    .replace(/ş/g, 's')
-    .replace(/ö/g, 'o')
-    .replace(/ç/g, 'c')
+    .toLowerCase()
+    .replace(/ß/g, 'ss')
+    // Unicode NFD ile tüm aksanları (é, è, ñ, ä, ö, ü, ç, ş, ğ, à, ô …) ayrıştırıp
+    // birleşik aksan işaretlerini kaldır. Böylece Fransızca/Almanca/İspanyolca/
+    // İtalyanca kelimeler ("café", "jamón", "käse", "pâtes") doğru normalize olur.
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9\s]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -327,11 +508,22 @@ function scoreFood(food: FoodCatalogItem, query: string): number {
   if (!query) return 1
   // Try misspelling correction first
   const correctedQuery = correctMisspelling(query)
-  const expandedTerms = [query, ...(SYNONYMS[query] ?? [])]
+  // Tam sorguyu VE her kelimeyi ayrı ayrı eş anlamlılarla genişlet. Böylece
+  // "poulet grille" gibi çok kelimeli aramalarda "poulet" → "chicken" eşlenir.
+  const expandedSet = new Set<string>()
+  const addWithSynonyms = (value: string) => {
+    if (!value) return
+    expandedSet.add(value)
+    for (const syn of getMergedSynonyms(value)) expandedSet.add(syn)
+  }
+  addWithSynonyms(query)
+  for (const token of query.split(' ').filter(Boolean)) addWithSynonyms(token)
   // Also expand corrected form if different
   if (correctedQuery !== query) {
-    expandedTerms.push(correctedQuery, ...(SYNONYMS[correctedQuery] ?? []))
+    addWithSynonyms(correctedQuery)
+    for (const token of correctedQuery.split(' ').filter(Boolean)) addWithSynonyms(token)
   }
+  const expandedTerms = [...expandedSet]
   const haystack = food.searchableText
   const name = normalizeFoodText(food.name)
   const brand = normalizeFoodText(food.brand ?? '')

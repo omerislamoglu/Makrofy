@@ -4,7 +4,7 @@ import { Search, Sparkles, PenLine, CalendarDays, X, ChevronDown, ChevronUp, Tra
 import type { Meal } from '../types/meal'
 import type { MacroNutrients } from '../types/nutrition'
 import { sumMacros, EMPTY_MACROS } from '../types/nutrition'
-import { formatTime } from '../utils/date'
+import { formatTime, BCP47_BY_LOCALE } from '../utils/date'
 import { useHaptics } from '../hooks/useCapacitor'
 import { useAuth } from '../hooks/useAuth'
 import { useMealHistory } from '../hooks/useMeals'
@@ -113,9 +113,9 @@ function FilterBar({
   active: SourceFilter
   onChange: (f: SourceFilter) => void
 }) {
-  const { strings, locale } = useLocale()
+  const { strings } = useLocale()
   const filters: { key: SourceFilter; label: string }[] = [
-    { key: 'all', label: locale === 'tr' ? 'Tümü' : 'All' },
+    { key: 'all', label: strings.history.filterAll },
     { key: 'ai_scan', label: strings.add.tabScan },
     { key: 'manual', label: strings.add.tabManual },
   ]
@@ -173,8 +173,8 @@ function SearchBar({
 }
 
 function DaySummaryCard({ totals, mealCount }: { totals: MacroNutrients; mealCount: number }) {
-  const { strings, locale } = useLocale()
-  const mealWord = locale === 'tr' ? 'öğün' : (mealCount === 1 ? 'meal' : 'meals')
+  const { strings } = useLocale()
+  const mealWord = strings.history.mealWord(mealCount)
   return (
     <Card variant="subtle" padding="md" animated={false}>
       <div className="flex items-center justify-between">
@@ -193,8 +193,8 @@ function DaySummaryCard({ totals, mealCount }: { totals: MacroNutrients; mealCou
         </div>
         <div className="flex gap-5">
           <MacroStat label="P" value={totals.protein} />
-          <MacroStat label="C" value={totals.carbs} />
-          <MacroStat label="F" value={Math.round(totals.fat)} />
+          <MacroStat label="K" value={totals.carbs} />
+          <MacroStat label="Y" value={Math.round(totals.fat)} />
         </div>
       </div>
     </Card>
@@ -286,8 +286,8 @@ function HistoryMealCard({
         <div className="flex items-center justify-between pt-2.5 border-t border-zinc-800/40">
           <div className="flex gap-4">
             <MacroLabel label="P" value={meal.totalMacros?.protein ?? 0} />
-            <MacroLabel label="C" value={meal.totalMacros?.carbs ?? 0} />
-            <MacroLabel label="F" value={Math.round(meal.totalMacros?.fat ?? 0)} />
+            <MacroLabel label="K" value={meal.totalMacros?.carbs ?? 0} />
+            <MacroLabel label="Y" value={Math.round(meal.totalMacros?.fat ?? 0)} />
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-zinc-600 tabular-nums">{time}</span>
@@ -338,17 +338,17 @@ function HistoryMealCard({
                       {item.grams}g
                     </p>
                   </div>
-                  <div className="flex items-center gap-3 flex-shrink-0">
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     <span className="text-[10px] text-zinc-400 tabular-nums">
-                      <span className="text-zinc-500 font-medium">P</span> {item.macros.protein}g
+                      <span className="text-zinc-500 font-medium">P</span>{item.macros.protein}g
                     </span>
                     <span className="text-[10px] text-zinc-400 tabular-nums">
-                      <span className="text-zinc-500 font-medium">C</span> {item.macros.carbs}g
+                      <span className="text-zinc-500 font-medium">C</span>{item.macros.carbs}g
                     </span>
                     <span className="text-[10px] text-zinc-400 tabular-nums">
-                      <span className="text-zinc-500 font-medium">F</span> {Math.round(item.macros.fat)}g
+                      <span className="text-zinc-500 font-medium">F</span>{Math.round(item.macros.fat)}g
                     </span>
-                    <span className="text-[11px] font-semibold tabular-nums text-zinc-300">
+                    <span className="text-[10px] font-semibold tabular-nums text-zinc-300">
                       {item.macros.calories}
                     </span>
                   </div>
@@ -464,7 +464,7 @@ function MacroLabel({ label, value }: { label: string; value: number }) {
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
-function generateDateRange(days: number): DateItem[] {
+function generateDateRange(days: number, bcp47 = 'en-US'): DateItem[] {
   const items: DateItem[] = []
   const todayStr = new Date().toISOString().split('T')[0]
 
@@ -475,8 +475,8 @@ function generateDateRange(days: number): DateItem[] {
     items.push({
       dateKey,
       dayNum: d.getDate(),
-      dayName: d.toLocaleDateString(undefined, { weekday: 'short' }),
-      monthShort: d.toLocaleDateString(undefined, { month: 'short' }),
+      dayName: d.toLocaleDateString(bcp47, { weekday: 'short' }),
+      monthShort: d.toLocaleDateString(bcp47, { month: 'short' }),
       isToday: dateKey === todayStr,
     })
   }
@@ -486,8 +486,9 @@ function generateDateRange(days: number): DateItem[] {
 export default function HistoryPage() {
   // Regenerate date range based on current day (refreshes after midnight)
   const todayKey = new Date().toISOString().slice(0, 10)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const DATE_RANGE = useMemo(() => generateDateRange(14), [todayKey])
+  const { strings, locale } = useLocale()
+  const bcp47 = BCP47_BY_LOCALE[locale] ?? 'en-US'
+  const DATE_RANGE = useMemo(() => generateDateRange(14, bcp47), [todayKey, bcp47])
   const [selectedDate, setSelectedDate] = useState<string>(() => generateDateRange(1)[0].dateKey)
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
   const [searchQuery, setSearchQuery] = useState<string>('')
@@ -495,7 +496,6 @@ export default function HistoryPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [showDeleteToast, setShowDeleteToast] = useState(false)
   const [showDeleteError, setShowDeleteError] = useState(false)
-  const { strings } = useLocale()
   const { user } = useAuth()
   const { allMeals, loading, error, deleteMeal } = useMealHistory(user?.uid)
 
@@ -553,7 +553,7 @@ export default function HistoryPage() {
   const hasFilters = sourceFilter !== 'all' || searchQuery.trim() !== ''
 
   return (
-    <div className="px-5 pt-14 pb-6 max-w-lg mx-auto">
+    <div className="px-5 pt-14 pb-6 max-w-lg md:max-w-2xl md:px-8 mx-auto">
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}

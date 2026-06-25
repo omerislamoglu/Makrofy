@@ -1,0 +1,5 @@
+/* Turkish localization for Info.plist usage descriptions */
+
+NSCameraUsageDescription = "Makrofy, yemek fotoğrafı çekerek besin değerlerini tahmin etmek için kameraya erişim ister.";
+NSMotionUsageDescription = "Makrofy, günlük adım sayınızı ve yürüyüşten yakılan kaloriyi göstermek için hareket verilerine erişim ister.";
+NSPhotoLibraryUsageDescription = "Makrofy, galerinizden yemek veya program fotoğrafı seçip yalnızca ilgili analiz için kullanmak üzere fotoğraf kitaplığınıza erişim ister.";

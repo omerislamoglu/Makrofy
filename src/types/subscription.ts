@@ -17,7 +17,16 @@ export interface Subscription {
   updatedAt: FirestoreTimestamp
 }
 
-export type SubscriptionPlan = 'free' | 'pro_monthly' | 'pro_quarterly' | 'pro_yearly'
+export type SubscriptionPlan =
+  | 'free'
+  | 'plus_monthly'
+  | 'plus_quarterly'
+  | 'plus_yearly'
+  | 'pro_monthly'
+  | 'pro_quarterly'
+  | 'pro_yearly'
+
+export type SubscriptionTier = 'free' | 'plus' | 'pro'
 
 export type SubscriptionStatus =
   | 'active'
@@ -35,28 +44,26 @@ export interface ScanLimit {
   total: number
   remaining: number
   isLimited: boolean
+  extraCredits?: number
   resetsAt?: string // ISO date when free scans reset (if applicable)
 }
 
 export const FREE_DAILY_SCAN_LIMIT = 0
+export const PLUS_DAILY_SCAN_LIMIT = 3
 export const PRO_DAILY_SCAN_LIMIT = 5
 
-// ─── Plan Pricing ───────────────────────────────────────────────────────────
-export interface PlanPricing {
-  plan: SubscriptionPlan
-  price: number
-  currency: string
-  interval: 'month' | 'year' | null
-  trialDays?: number
-  savings?: string // e.g. "Save 33%"
+export function getPlanTier(plan?: SubscriptionPlan | string | null): SubscriptionTier {
+  if (!plan) return 'free'
+  if (plan.includes('pro')) return 'pro'
+  if (plan.includes('plus')) return 'plus'
+  return 'free'
 }
 
-export const PLAN_PRICES: PlanPricing[] = [
-  { plan: 'free', price: 0, currency: 'TRY', interval: null },
-  { plan: 'pro_monthly', price: 149.99, currency: 'TRY', interval: 'month' },
-  { plan: 'pro_quarterly', price: 349.99, currency: 'TRY', interval: 'month', savings: '%22 tasarruf' },
-  { plan: 'pro_yearly', price: 899.99, currency: 'TRY', interval: 'year', savings: '%50 tasarruf' },
-]
+export function getDailyScanLimitForTier(tier: SubscriptionTier): number {
+  if (tier === 'pro') return PRO_DAILY_SCAN_LIMIT
+  if (tier === 'plus') return PLUS_DAILY_SCAN_LIMIT
+  return FREE_DAILY_SCAN_LIMIT
+}
 
 // ─── Paywall Config ─────────────────────────────────────────────────────────
 export interface PaywallConfig {

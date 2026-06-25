@@ -5,6 +5,9 @@ export interface AppStrings {
     add: string
     fitness: string
     profile: string
+    today: string
+    addMeal: string
+    settings: string
   }
   mealType: {
     breakfast: string
@@ -16,6 +19,7 @@ export interface AppStrings {
     dailyGoal: string
     consumed: string
     remaining: string
+    goal: string
     recentMeals: string
     records: string
     addMeal: string
@@ -24,6 +28,10 @@ export interface AppStrings {
     noMealsSubtitle: string
     proScansBadge: string
     freeScansBadge: (n: number) => string
+    steps: string
+    burned: string
+    motionPermission: string
+    walkingEstimate: string
   }
   add: {
     title: string
@@ -56,6 +64,8 @@ export interface AppStrings {
     filteredEmpty: string
     today: string
     yesterday: string
+    filterAll: string
+    mealWord: (count: number) => string
   }
   fitness: {
     title: string
@@ -109,6 +119,120 @@ export interface AppStrings {
     buildCustomDiet: string
     buildCustomDietSub: string
   }
+  aiProgram: {
+    // Goals
+    goalFatLoss: string
+    goalFatLossSub: string
+    goalMuscleGain: string
+    goalMuscleGainSub: string
+    goalFitLook: string
+    goalFitLookSub: string
+    goalWeightGain: string
+    goalWeightGainSub: string
+    goalStrength: string
+    goalStrengthSub: string
+    goalHealthyEating: string
+    goalHealthyEatingSub: string
+    // Loading
+    loadingPhoto: string
+    loadingPhysique: string
+    loadingWorkout: string
+    loadingNutrition: string
+    loadingFinishing: string
+    loadingHint: string
+    // CTA
+    ctaCreate: string
+    ctaEvaluate: string
+    // Errors
+    errUnsupportedFormat: string
+    errPhotoTooLarge: string
+    errGeneric: string
+    // Evaluation card
+    evaluationWeek: string
+    evaluationReadyWithPhoto: string
+    evaluationReadyNoPhoto: string
+    evaluationWaiting: (days: number, date: string, remainingDays: number) => string
+    evaluateNow: string
+    evaluationWaitingBtn: string
+    // Headers
+    twoWeekEvaluation: string
+    personalAIProgram: string
+    evalDescWithPhoto: string
+    evalDescNoPhoto: string
+    builderDescWithPhoto: string
+    builderDescNoPhoto: string
+    // Photo upload
+    progressPhoto: string
+    bodyPhoto: string
+    photoHint: string
+    tapToChange: string
+    photoProOnly: string
+    photoProOnlyDesc: string
+    removePhoto: string
+    // Fields
+    selectGoal: string
+    goalDetail: string
+    goalDetailPlaceholder: string
+    coreInfo: string
+    fromProfile: string
+    height: string
+    weight: string
+    age: string
+    gender: string
+    male: string
+    female: string
+    other: string
+    level: string
+    location: string
+    beginner: string
+    intermediate: string
+    advanced: string
+    gym: string
+    home: string
+    daysPerWeek: string
+    advancedPrefs: string
+    nutrition: string
+    normal: string
+    vegetarian: string
+    vegan: string
+    halal: string
+    lactoseFree: string
+    mealsPerDay: string
+    injuries: string
+    injuriesPlaceholder: string
+    allergies: string
+    allergiesPlaceholder: string
+    progressNotes: string
+    progressNotesPlaceholder: string
+    // Disclaimer
+    disclaimer: string
+    // Results
+    programReady: string
+    programReadyDefault: string
+    dailyTargetMacros: string
+    calories: string
+    protein: string
+    carbs: string
+    fat: string
+    workoutProgram: string
+    warmup: string
+    cooldown: string
+    cardioSuggestion: string
+    weeklyPlanMissing: string
+    dayLabel: (n: number) => string
+    workout: string
+    nutritionProgram: string
+    sampleMealsMissing: string
+    mealLabel: (n: number) => string
+    alternativeFoods: string
+    progressAndNotes: string
+    overviewFallback: string
+    strategyFallback: string
+    // Locked preview
+    lockedTitle: string
+    lockedDesc: string
+    unlockPro: string
+  }
   profile: {
     title: string
     settingsTab: string
@@ -123,6 +247,11 @@ export interface AppStrings {
     manageSubscriptionSub: string
     restorePurchase: string
     restorePurchaseSub: string
+    marketSection: string
+    buyScanPack: string
+    buyScanPackSub: string
+    upgradeToPro: string
+    upgradeToProSub: string
     usageSection: string
     aiScansUsed: string
     notifications: string
@@ -132,6 +261,16 @@ export interface AppStrings {
     weeklySummarySub: string
     promoNotifs: string
     promoNotifsSub: string
+    calorieReminder: string
+    calorieReminderSub: string
+    streakReminder: string
+    streakReminderSub: string
+    dailyMotivation: string
+    dailyMotivationSub: string
+    workoutReminder: string
+    workoutReminderSub: string
+    evaluationReminder: string
+    evaluationReminderSub: string
     systemNotifs: string
     systemNotifsSub: string
     languageSection: string
@@ -150,6 +289,7 @@ export interface AppStrings {
     myAccount: string
     user: string
     proMemberBadge: string
+    plusMemberBadge: string
     active: string
     subscription: string
     restoring: string
@@ -158,6 +298,14 @@ export interface AppStrings {
     support: string
     contactUs: string
     contactEmail: string
+    supportEmailSubject: string
+    supportEmailBody: (diag: {
+      version: string
+      platform: string
+      locale: string
+      plan: string
+      userId: string
+    }) => string
     deleteAccount: string
     deleteAccountSub: string
     deleteTitle: string
@@ -175,6 +323,7 @@ export interface AppStrings {
     deleteError: string
     giveUp: string
     nutritionDisclaimer: string
+    defaultUserName: string
   }
   paywall: {
     title: string
@@ -202,6 +351,40 @@ export interface AppStrings {
     noActiveSubscription: string
     restoreFailed: string
     errorGeneric: string
+    purchaseNetworkError: string
+    purchaseNotAllowed: string
+    freeTrialNote: (count: number, unit: 'day' | 'week' | 'month' | 'year') => string
+    introOfferNote: (count: number, unit: 'day' | 'week' | 'month' | 'year', price: string) => string
+    // Plus/Pro tier paywall UI
+    plusScansPerDay: string
+    proScansPerDay: string
+    programsUnlocked: string
+    surveyAIProgram: string
+    photoAIProgram: string
+    biweeklyEvaluation: string
+    popular: string
+    bestValueBadge: string
+    perScan: (price: string) => string
+    oneTime: string
+    headerScanPacks: string
+    headerChoosePlan: string
+    subScanPacks: string
+    subChoosePlan: string
+    memberships: string
+    scanPacksTitle: string
+    scanPacksSub: string
+    cancelAnytime: string
+    processing: string
+    restoringText: string
+    notNow: string
+    buyScanPack: string
+    upgradeToPro: string
+    upgradeToPlus: string
+    scanCreditsAdded: (count: number) => string
+    purchaseRestored: string
+    periodMonthly: string
+    period3Months: string
+    periodYearly: string
   }
   scanBanner: {
     usedTitle: string
@@ -503,9 +686,12 @@ export interface AppStrings {
     imageTooLarge: string
     fileReadError: string
     cameraFailed: string
+    cameraPermissionDenied: string
     galleryFailed: string
+    galleryPermissionDenied: string
     uploadFailed: string
     analysisFailed: string
+    networkError: string
     scanOpenAll: string
     scanAvailableAll: string
     dailyQuotaExhausted: string
@@ -598,6 +784,18 @@ export interface AppStrings {
     unitAmountLabel: string
     searchMenuIn: (name: string) => string
     saveAllCount: (n: number) => string
+    // Single-letter macro abbreviations for compact rows (P / C / F)
+    macroP: string
+    macroC: string
+    macroF: string
+    // Localized example foods for the text-entry tab
+    textExamples: string[]
+    // Portion/serving modal
+    servingQuestion: (name: string) => string
+    servingQuestionSub: string
+    servingLabel: string
+    quantityLabel: string
+    applyButton: string
   }
   common: {
     save: string
@@ -620,5 +818,69 @@ export interface AppStrings {
     kcal: string
     grams: string
     perMonth: string
+  }
+
+  notif: {
+    calorieTitle: string
+    calorieBodyLose: string
+    calorieBodyGain: string
+    calorieBodyMaintain: string
+    calorieBodyRemaining: (kcal: number) => string
+    streakTitle: string
+    streakBody: string
+    morningTitle: string
+    morningBody: (kcal: number) => string
+    weeklyTitle: string
+    weeklyBody: string
+    workoutTitle: string
+    workoutBody: (focus: string) => string
+    evaluationTitle: string
+    evaluationBody: string
+    mealTitle: string
+    mealBody: string
+  }
+  onboarding: {
+    slide1Title: string
+    slide1Desc: string
+    slide2Title: string
+    slide2Desc: string
+    slide3Title: string
+    slide3Desc: string
+    getStarted: string
+    disclaimer: string
+  }
+  rating: {
+    title: string
+    body: string
+    rate: string
+    later: string
+  }
+  toastErrors: {
+    permissionDenied: string
+    resultNotSaved: string
+    mealNotSaved: string
+  }
+  foodParser: {
+    nonsense: string
+    noMatch: string
+  }
+  survey: {
+    letsFindPath: string
+    step: (current: number, total: number) => string
+    buildMine: string
+    programTitle: string
+    programIntroPre: string
+    programIntroHighlight: string
+    programIntroPost: string
+    programBuildSub: (n: number) => string
+    programBrowse: string
+    programBrowseSub: string
+    dietTitle: string
+    dietIntroPre: string
+    dietIntroHighlight: string
+    dietIntroPost: string
+    dietBuildSub: (n: number) => string
+    dietBrowse: string
+    dietBrowseSub: string
   }
 }

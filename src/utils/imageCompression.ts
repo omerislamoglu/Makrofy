@@ -1,15 +1,17 @@
 /**
  * imageCompression — AI analizine gönderilmeden önce görüntüyü sıkıştırır.
  *
- * - Max 1536×1536 px (AI kalitesi için yeterli, memory için güvenli)
+ * - Max 1024×1024 px (AI tanıma için yeterli, daha hızlı yükleme + analiz)
  * - JPEG quality 0.80
  * - Base64 yalnızca sıkıştırma SONRASI üretilir
  * - Orijinal base64 hiçbir zaman state'te tutulmaz
  */
 
-const MAX_DIMENSION = 1536
+// 1024px is plenty for food recognition and keeps the upload + the model's
+// image-prefill small, which is the cheapest latency win. (Was 1536px.)
+const MAX_DIMENSION = 1024
 const JPEG_QUALITY = 0.80
-const MAX_SIZE_BYTES = 2.5 * 1024 * 1024 // 2.5 MB
+const MAX_SIZE_BYTES = 1.5 * 1024 * 1024 // 1.5 MB
 
 export interface CompressedImage {
   blob: Blob

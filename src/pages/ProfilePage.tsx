@@ -26,6 +26,7 @@ import {
   Activity,
   Flame,
   Dumbbell,
+  Zap,
 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useSubscription } from '../hooks/useSubscription'
@@ -33,6 +34,8 @@ import { useScanLimit } from '../hooks/useScanLimit'
 import { useHaptics, isNative } from '../hooks/useCapacitor'
 import { Capacitor } from '@capacitor/core'
 import { useLocale } from '../contexts/LocaleContext'
+import { SUPPORTED_LOCALES } from '../i18n'
+import { ensurePermission } from '../services/notificationService'
 import type { BodyMetrics, ActivityLevel, FitnessGoal, Gender, UserProfile } from '../types/user'
 import {
   calculateDailyGoalFromMetrics,
@@ -40,6 +43,7 @@ import {
   calculateTDEE,
   calculateBMI,
 } from '../utils/goalCalc'
+import { MACRO_COLORS } from '../constants/macroColors'
 
 // ─── Tab Types ──────────────────────────────────────────────────────────────
 
@@ -66,22 +70,39 @@ function SettingsRow({
   trailing,
   disabled = false,
 }: SettingsRowProps) {
+  // Bir satır <div> olarak render edilir (motion.button DEĞİL) çünkü `trailing`
+  // içinde sıkça bir <button> (toggle) bulunur ve buton-içinde-buton geçersiz
+  // HTML'dir. Tıklanabilir olduğunda erişilebilirlik için role/tabIndex/klavye
+  // davranışı eklenir.
+  const interactive = !!onPress && !disabled
   return (
-    <motion.button
-      onClick={onPress}
-      disabled={disabled}
-      whileTap={onPress ? { scale: 0.97 } : undefined}
-      whileHover={onPress ? { backgroundColor: 'rgba(39,39,42,0.4)' } : undefined}
+    <motion.div
+      onClick={interactive ? onPress : undefined}
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onPress?.()
+              }
+            }
+          : undefined
+      }
+      aria-disabled={disabled || undefined}
+      whileTap={interactive ? { scale: 0.97 } : undefined}
+      whileHover={interactive ? { backgroundColor: 'rgba(39,39,42,0.4)' } : undefined}
       transition={{ type: 'spring', stiffness: 400, damping: 25 }}
       className={`
         w-full flex items-center gap-3.5 px-4 py-3.5
-        text-left disabled:opacity-40
-        ${onPress ? 'cursor-pointer' : 'cursor-default'}
+        text-left ${disabled ? 'opacity-40' : ''}
+        ${interactive ? 'cursor-pointer' : 'cursor-default'}
         ${destructive ? 'text-red-400' : 'text-zinc-100'}
       `}
     >
       <motion.div
-        whileTap={onPress ? { scale: 1.15, rotate: -8 } : undefined}
+        whileTap={interactive ? { scale: 1.15, rotate: -8 } : undefined}
         transition={{ type: 'spring', stiffness: 500, damping: 15 }}
         className={`
           w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0
@@ -108,7 +129,7 @@ function SettingsRow({
           <ChevronRight size={15} className="text-zinc-600 flex-shrink-0" />
         </motion.div>
       ) : null}
-    </motion.button>
+    </motion.div>
   )
 }
 
@@ -678,9 +699,9 @@ function BodyMetricsCard({
             { label: g.height, value: `${metrics.heightCm} ${g.cmUnit}` },
             { label: g.weight, value: `${metrics.weightKg} ${g.kgUnit}` },
           ].map((item) => (
-            <div key={item.label} className="bg-zinc-800/50 rounded-xl p-2.5 text-center">
-              <p className="text-[16px] font-bold text-zinc-100">{item.value}</p>
-              <p className="text-[10px] text-zinc-500 mt-0.5">{item.label}</p>
+            <div key={item.label} className="bg-zinc-800/50 rounded-xl p-2 text-center min-w-0">
+              <p className="text-[15px] font-bold text-zinc-100 truncate">{item.value}</p>
+              <p className="text-[9px] text-zinc-500 mt-0.5 truncate">{item.label}</p>
             </div>
           ))}
         </div>
@@ -724,14 +745,14 @@ function BodyMetricsCard({
         {/* Macro bars */}
         <div className="space-y-2">
           {[
-            { label: strings.common.protein, value: dailyGoal.protein,  color: 'bg-blue-500',   kcal: dailyGoal.protein * 4 },
-            { label: strings.common.carbs,   value: dailyGoal.carbs,    color: 'bg-amber-400',  kcal: dailyGoal.carbs * 4 },
-            { label: strings.common.fat,     value: dailyGoal.fat,      color: 'bg-rose-400',   kcal: dailyGoal.fat * 9 },
+            { label: strings.common.protein, value: dailyGoal.protein,  color: MACRO_COLORS.protein.bg, kcal: dailyGoal.protein * 4 },
+            { label: strings.common.carbs,   value: dailyGoal.carbs,    color: MACRO_COLORS.carbs.bg,   kcal: dailyGoal.carbs * 4 },
+            { label: strings.common.fat,     value: dailyGoal.fat,      color: MACRO_COLORS.fat.bg,     kcal: dailyGoal.fat * 9 },
           ].map((m) => {
             const pct = Math.round((m.kcal / dailyGoal.calories) * 100)
             return (
-              <div key={m.label} className="flex items-center gap-2.5">
-                <span className="text-[11px] text-zinc-500 w-20 flex-shrink-0">{m.label}</span>
+              <div key={m.label} className="flex items-center gap-2">
+                <span className="text-[11px] text-zinc-500 w-16 flex-shrink-0 truncate">{m.label}</span>
                 <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
@@ -740,7 +761,7 @@ function BodyMetricsCard({
                     className={`h-full rounded-full ${m.color}`}
                   />
                 </div>
-                <span className="text-[11px] text-zinc-300 tabular-nums w-14 text-right flex-shrink-0">
+                <span className="text-[10px] text-zinc-300 tabular-nums w-16 text-right flex-shrink-0">
                   {m.value}g · {pct}%
                 </span>
               </div>
@@ -776,12 +797,12 @@ function BodyMetricsCard({
 
 export default function ProfilePage() {
   const { user, signOut, deleteAccount, updateProfile } = useAuth()
-  const { isPro, restore } = useSubscription(user?.uid)
+  const { isPro, planTier, restore } = useSubscription(user?.uid)
   const { limit } = useScanLimit(user?.uid, user?.isPro)
   const navigate = useNavigate()
   const haptics = useHaptics()
 
-  const { strings, changeLocale, isEnglishOverride } = useLocale()
+  const { strings, locale, changeLocale } = useLocale()
   const s = strings.profile
   const g = strings.goals
 
@@ -797,7 +818,6 @@ export default function ProfilePage() {
   const mealReminders = user?.mealReminders ?? false
   const weeklySummary = user?.weeklySummary ?? true
   const promoNotifs = user?.promoNotifs ?? false
-
   const updatePreference = (updates: Partial<UserProfile>) => {
     updateProfile(updates)
   }
@@ -867,7 +887,7 @@ export default function ProfilePage() {
   }
 
   const appVersion = '1.0.0'
-  const buildNumber = '1'
+  const buildNumber = '2'
 
   return (
     <div className="px-5 pt-14 pb-28 max-w-lg mx-auto">
@@ -883,7 +903,7 @@ export default function ProfilePage() {
           transition={{ duration: 0.3 }}
           className="mb-6"
         >
-          <h1 className="text-[26px] font-bold tracking-tight">Hesabım</h1>
+          <h1 className="text-[26px] font-bold tracking-tight">{s.myAccount}</h1>
         </motion.div>
 
         {/* ── Kullanıcı Kartı ─────────────────────────────────────── */}
@@ -899,13 +919,13 @@ export default function ProfilePage() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-zinc-100 truncate">
-                {user?.displayName || 'Kullanıcı'}
+                {user?.displayName || strings.profile.defaultUserName}
               </p>
               <p className="text-[12px] text-zinc-500 truncate">{user?.email}</p>
               {isPro && (
                 <div className="flex items-center gap-1 mt-1">
                   <Crown size={11} className="text-white" />
-                  <span className="text-[11px] font-semibold text-white">Pro Üye</span>
+                  <span className="text-[11px] font-semibold text-white">{planTier === 'plus' ? s.plusMemberBadge : s.proMemberBadge}</span>
                 </div>
               )}
             </div>
@@ -1014,7 +1034,14 @@ export default function ProfilePage() {
                         haptics.notificationSuccess()
                       } else {
                         haptics.notificationError()
-                        setRestoreMessage({ text: result.error || s.noActiveFound, success: false })
+                        // RevenueCat geri-yükleme hataları İngilizce literal döndürür
+                        // (ör. "No active subscription found"). TR/EN kullanıcıya
+                        // her zaman yerelleştirilmiş metin göster — İngilizce sızmasın.
+                        const isNoActiveSub = !result.error || result.error === 'No active subscription found'
+                        setRestoreMessage({
+                          text: isNoActiveSub ? s.noActiveFound : s.restoreError,
+                          success: false,
+                        })
                       }
                     } catch {
                       haptics.notificationError()
@@ -1031,6 +1058,26 @@ export default function ProfilePage() {
                       {restoreMessage.text}
                     </p>
                   </div>
+                )}
+              </Section>
+
+              {/* Market — scan paketi al + (Plus ise) Pro'ya yükselt.
+                  Aboneler dahil herkesin scan paketine erişebilmesi için
+                  ayrı, görünür bir giriş noktası. */}
+              <Section title={s.marketSection} delay={0.22}>
+                <SettingsRow
+                  icon={<Zap size={16} className="text-emerald-400" />}
+                  label={s.buyScanPack}
+                  sublabel={s.buyScanPackSub}
+                  onPress={() => { haptics.impactLight(); navigate('/paywall', { state: { focus: 'scan' } }) }}
+                />
+                {planTier === 'plus' && (
+                  <SettingsRow
+                    icon={<Crown size={16} className="text-amber-400" />}
+                    label={s.upgradeToPro}
+                    sublabel={s.upgradeToProSub}
+                    onPress={() => { haptics.impactLight(); navigate('/paywall', { state: { focus: 'pro' } }) }}
+                  />
                 )}
               </Section>
 
@@ -1066,16 +1113,22 @@ export default function ProfilePage() {
             >
               {/* ── Dil ve Bölge ── */}
               <Section title={s.languageSection} delay={0.05}>
-                <ToggleRow
-                  icon={<span className="text-base">🌐</span>}
-                  label={s.forceEnglish}
-                  sublabel={s.forceEnglishSub}
-                  value={isEnglishOverride}
-                  onChange={(v) => {
-                    haptics.selectionChanged()
-                    changeLocale(v ? 'en' : null)
-                  }}
-                />
+                {SUPPORTED_LOCALES.map((opt) => (
+                  <SettingsRow
+                    key={opt.code}
+                    icon={<span className="text-base">{opt.flag}</span>}
+                    label={opt.label}
+                    onPress={() => {
+                      haptics.selectionChanged()
+                      changeLocale(opt.code)
+                    }}
+                    trailing={
+                      locale === opt.code
+                        ? <Check size={16} className="text-emerald-400" />
+                        : undefined
+                    }
+                  />
+                ))}
               </Section>
 
               {/* ── Bildirimler ── Apple zorunlu: bildirim tercihleri */}
@@ -1085,18 +1138,29 @@ export default function ProfilePage() {
                   label={s.mealReminders}
                   sublabel={s.mealRemindersSub}
                   value={mealReminders}
-                  onChange={(v) => {
+                  onChange={async (v) => {
                     haptics.selectionChanged()
+                    if (v && isNative) {
+                      const granted = await ensurePermission()
+                      if (!granted) { openNotificationSettings(); return }
+                    }
                     updatePreference({ mealReminders: v })
-                    if (v && isNative) openNotificationSettings()
                   }}
                 />
+                {/* C6 — Haftalık özet */}
                 <ToggleRow
                   icon={<Star size={16} className="text-zinc-400" />}
                   label={s.weeklySummary}
                   sublabel={s.weeklySummarySub}
                   value={weeklySummary}
-                  onChange={(v) => { haptics.selectionChanged(); updatePreference({ weeklySummary: v }) }}
+                  onChange={async (v) => {
+                    haptics.selectionChanged()
+                    if (v && isNative) {
+                      const granted = await ensurePermission()
+                      if (!granted) { openNotificationSettings(); return }
+                    }
+                    updatePreference({ weeklySummary: v })
+                  }}
                 />
                 <ToggleRow
                   icon={<Mail size={16} className="text-zinc-400" />}
@@ -1167,7 +1231,19 @@ export default function ProfilePage() {
                   sublabel={s.contactEmail}
                   onPress={() => {
                     haptics.impactLight()
-                    openURL('mailto:support@makrofy.app')
+                    // Prefill subject + diagnostics so support can act fast.
+                    const platform = Capacitor.getPlatform()
+                    const subject = s.supportEmailSubject
+                    const diag = s.supportEmailBody({
+                      version: `${appVersion} (${buildNumber})`,
+                      platform,
+                      locale,
+                      plan: planTier ?? 'free',
+                      userId: user?.uid ?? '-',
+                    })
+                    openURL(
+                      `mailto:support@makrofy.app?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(diag)}`
+                    )
                   }}
                   trailing={<ExternalLink size={13} className="text-zinc-600" />}
                 />

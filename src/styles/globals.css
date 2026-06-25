@@ -10,8 +10,8 @@
   --sal: env(safe-area-inset-left, 0px);
   --sar: env(safe-area-inset-right, 0px);
 
-  /* Bottom nav height (fixed) + safe area */
-  --bottom-nav-height: 60px;
+  /* Bottom nav height (fixed) + safe area — slim, icon-only (Instagram-style) */
+  --bottom-nav-height: 50px;
   --bottom-nav-total: calc(var(--bottom-nav-height) + var(--sab));
 }
 

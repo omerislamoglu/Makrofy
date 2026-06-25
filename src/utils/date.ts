@@ -1,5 +1,15 @@
 import type { AppLocale } from '../i18n'
 
+/** AppLocale → BCP47 for Intl date/time formatting. */
+export const BCP47_BY_LOCALE: Record<AppLocale, string> = {
+  tr: 'tr-TR',
+  en: 'en-US',
+  de: 'de-DE',
+  fr: 'fr-FR',
+  es: 'es-ES',
+  it: 'it-IT',
+}
+
 export function getToday(): string {
   const now = new Date()
   const year = now.getFullYear()
@@ -18,7 +28,7 @@ export function getYesterday(): string {
 }
 
 export function formatTime(isoString: string, locale: AppLocale = 'tr'): string {
-  const localeStr = locale === 'en' ? 'en-US' : 'tr-TR'
+  const localeStr = BCP47_BY_LOCALE[locale] ?? 'en-US'
   return new Date(isoString).toLocaleTimeString(localeStr, {
     hour: '2-digit',
     minute: '2-digit',

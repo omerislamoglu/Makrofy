@@ -1,6 +1,7 @@
 import { initializeApp, FirebaseOptions } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
+import { getFirestore, initializeFirestore, persistentLocalCache } from 'firebase/firestore'
+import { Capacitor } from '@capacitor/core'
 import { getStorage } from 'firebase/storage'
 
 // ─── Environment validation ────────────────────────────────────────────────
@@ -53,7 +54,16 @@ const app = initializeApp(firebaseConfig)
 
 export { app }
 export const auth = getAuth(app)
-export const db = getFirestore(app)
+
+// ─── Firestore — offline persistence ─────────────────────────────────────────
+// Web path: IndexedDB-backed cache so documents survive page/app reloads.
+// Native iOS path: uses Cloud Functions via fetch (not Firestore Web SDK), so
+// the Firestore client never executes reads/writes — memoryLocalCache is fine.
+// Demo mode: no real Firebase project, any cache setting works, keep it light.
+export const db = (isDemoMode || Capacitor.isNativePlatform())
+  ? getFirestore(app)
+  : initializeFirestore(app, { localCache: persistentLocalCache() })
+
 export const storage = getStorage(app)
 
 export default app

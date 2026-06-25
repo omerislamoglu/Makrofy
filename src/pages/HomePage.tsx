@@ -1,17 +1,20 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Camera, Plus, ChevronRight, Sparkles, Flame, Zap, Target, Trash2 } from 'lucide-react'
+import { Camera, Plus, ChevronRight, Sparkles, Flame, Zap, Target, Trash2, Footprints } from 'lucide-react'
 import { useHaptics } from '../hooks/useCapacitor'
 import { useAuth } from '../hooks/useAuth'
 import type { Meal, MealType } from '../types/meal'
 import type { FitnessGoal } from '../types/user'
 import { useTodayMeals } from '../hooks/useMeals'
 import { useScanLimit } from '../hooks/useScanLimit'
+import { getTodayPedometerSummary, type PedometerSummary } from '../services/pedometerService'
+import { getTodayWorkoutWidgetNote, syncMakrofyWidget } from '../services/widgetService'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import ProgressBar from '../components/ui/ProgressBar'
 import { useLocale } from '../contexts/LocaleContext'
+import { BCP47_BY_LOCALE } from '../utils/date'
 
 // ─── Tip tanımları ──────────────────────────────────────────────────────────
 
@@ -40,6 +43,13 @@ const DEFAULT_DAILY_GOAL: HomeDailyGoal = {
   carbs: 250,
   fat: 70,
   fiber: 30,
+}
+
+const EMPTY_PEDOMETER_SUMMARY: PedometerSummary = {
+  available: false,
+  steps: 0,
+  distanceMeters: 0,
+  caloriesBurned: 0,
 }
 
 
@@ -102,7 +112,7 @@ function MealPreviewCard({
   const createdAt = typeof meal.createdAt === 'string'
     ? meal.createdAt
     : meal.createdAt?.toDate?.().toISOString() ?? new Date().toISOString()
-  const time = new Date(createdAt).toLocaleTimeString(locale === 'tr' ? 'tr-TR' : 'en-US', {
+  const time = new Date(createdAt).toLocaleTimeString(BCP47_BY_LOCALE[locale], {
     hour: '2-digit',
     minute: '2-digit',
   })
@@ -243,6 +253,8 @@ export default function HomePage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [showDeleteToast, setShowDeleteToast] = useState(false)
   const [deleteError, setDeleteError] = useState(false)
+  const [pedometer, setPedometer] = useState<PedometerSummary>(EMPTY_PEDOMETER_SUMMARY)
+  const [workoutWidgetNote, setWorkoutWidgetNote] = useState('')
 
   const handleDeleteRequest = (mealId: string) => {
     if (deletingId) return
@@ -294,6 +306,55 @@ export default function HomePage() {
 
   const remaining = Math.max(0, DAILY_GOAL.calories - todayMacros.calories)
   const calorieProgress = (todayMacros.calories / DAILY_GOAL.calories) * 100
+  const weightKg = user?.bodyMetrics?.weightKg ?? 75
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadPedometer = async () => {
+      const summary = await getTodayPedometerSummary(weightKg)
+      if (!cancelled) setPedometer(summary)
+    }
+
+    void loadPedometer()
+    window.addEventListener('focus', loadPedometer)
+    window.addEventListener('app:resume', loadPedometer)
+
+    return () => {
+      cancelled = true
+      window.removeEventListener('focus', loadPedometer)
+      window.removeEventListener('app:resume', loadPedometer)
+    }
+  }, [weightKg])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadWorkoutNote = async () => {
+      const note = await getTodayWorkoutWidgetNote(user?.uid)
+      if (!cancelled) setWorkoutWidgetNote(note)
+    }
+
+    void loadWorkoutNote()
+    window.addEventListener('focus', loadWorkoutNote)
+    window.addEventListener('app:resume', loadWorkoutNote)
+
+    return () => {
+      cancelled = true
+      window.removeEventListener('focus', loadWorkoutNote)
+      window.removeEventListener('app:resume', loadWorkoutNote)
+    }
+  }, [user?.uid])
+
+  // Debounce widget sync: macros now change rapidly during optimistic meal
+  // saves, and each call crosses the JS↔native bridge + reloads widget
+  // timelines. Coalesce bursts so only the settled state is pushed.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void syncMakrofyWidget(isPro, todayMacros, DAILY_GOAL, pedometer, workoutWidgetNote)
+    }, 600)
+    return () => window.clearTimeout(timer)
+  }, [DAILY_GOAL, isPro, pedometer, todayMacros, workoutWidgetNote])
 
   return (
     <div className="px-5 pt-14 pb-8 max-w-lg mx-auto">
@@ -307,7 +368,7 @@ export default function HomePage() {
         >
           <div>
             <p className="text-zinc-500 text-[11px] uppercase tracking-widest font-medium">
-              {new Date().toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+              {new Date().toLocaleDateString(BCP47_BY_LOCALE[locale], { weekday: 'long', month: 'short', day: 'numeric' })}
             </p>
             <h1 className="text-[26px] font-bold tracking-tight mt-0.5">{strings.history.today}</h1>
           </div>
@@ -370,6 +431,40 @@ export default function HomePage() {
           <Button id="add-manually-button" variant="secondary" size="lg" fullWidth icon={<Plus size={18} />} onClick={() => { haptics.impactLight(); navigate('/add', { state: { tab: 'manual' } }) }}>
             {strings.home.addMeal}
           </Button>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: 0.24 }}
+          className="grid grid-cols-2 gap-3 mb-4"
+        >
+          <div className="rounded-xl border border-zinc-800/50 bg-zinc-900/70 px-4 py-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Footprints size={15} className="text-zinc-400" />
+              <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-medium">{strings.home.steps}</p>
+            </div>
+            <p className="text-xl font-bold tabular-nums text-zinc-100">
+              {pedometer.steps.toLocaleString(BCP47_BY_LOCALE[locale])}
+            </p>
+            <p className="text-[10px] text-zinc-600 mt-0.5">
+              {pedometer.available ? `${(pedometer.distanceMeters / 1000).toFixed(1)} km` : strings.home.motionPermission}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-zinc-800/50 bg-zinc-900/70 px-4 py-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Flame size={15} className="text-zinc-400" />
+              <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-medium">{strings.home.burned}</p>
+            </div>
+            <p className="text-xl font-bold tabular-nums text-zinc-100">
+              {pedometer.caloriesBurned}
+              <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-medium ml-1">kcal</span>
+            </p>
+            <p className="text-[10px] text-zinc-600 mt-0.5">
+              {strings.home.walkingEstimate}
+            </p>
+          </div>
         </motion.div>
 
         {/* ── Kişisel Hedef Bannerı (varsa) veya ücretsiz tarama ── */}

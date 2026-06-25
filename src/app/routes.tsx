@@ -1,18 +1,31 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Routes, Route } from 'react-router-dom'
 import AppLayout from '../components/layout/AppLayout'
 import ProtectedRoute from '../components/layout/ProtectedRoute'
+
+// Eagerly loaded — tiny, always needed
 import OnboardingPage from '../pages/OnboardingPage'
 import AuthPage from '../pages/AuthPage'
-import GoalSetupPage from '../pages/GoalSetupPage'
 import HomePage from '../pages/HomePage'
-import AddMealPage from '../pages/AddMealPage'
-import AnalysisResultPage from '../pages/AnalysisResultPage'
 
-import HistoryPage from '../pages/HistoryPage'
-import FitnessPage from '../pages/FitnessPage'
-import PaywallPage from '../pages/PaywallPage'
-import ProfilePage from '../pages/ProfilePage'
-import WorkoutTrackerPage from '../pages/WorkoutTrackerPage'
+// Lazy loaded — heavy pages with large data imports
+const GoalSetupPage = lazy(() => import('../pages/GoalSetupPage'))
+const AddMealPage = lazy(() => import('../pages/AddMealPage'))
+const AnalysisResultPage = lazy(() => import('../pages/AnalysisResultPage'))
+const HistoryPage = lazy(() => import('../pages/HistoryPage'))
+const FitnessPage = lazy(() => import('../pages/FitnessPage'))
+const PaywallPage = lazy(() => import('../pages/PaywallPage'))
+const ProfilePage = lazy(() => import('../pages/ProfilePage'))
+const WorkoutTrackerPage = lazy(() => import('../pages/WorkoutTrackerPage'))
+
+/** Minimal fallback — black screen while chunk loads (matches app bg) */
+function PageFallback() {
+  return <div className="min-h-screen bg-black" />
+}
+
+function LazyPage({ children }: { children: React.ReactNode }) {
+  return <Suspense fallback={<PageFallback />}>{children}</Suspense>
+}
 
 export default function AppRoutes() {
   return (
@@ -25,7 +38,7 @@ export default function AppRoutes() {
         path="/goal-setup"
         element={
           <ProtectedRoute>
-            <GoalSetupPage />
+            <LazyPage><GoalSetupPage /></LazyPage>
           </ProtectedRoute>
         }
       />
@@ -38,13 +51,13 @@ export default function AppRoutes() {
         }
       >
         <Route path="/" element={<HomePage />} />
-        <Route path="/add" element={<AddMealPage />} />
-        <Route path="/analysis" element={<AnalysisResultPage />} />
-        <Route path="/history" element={<HistoryPage />} />
-        <Route path="/fitness" element={<FitnessPage />} />
-        <Route path="/paywall" element={<PaywallPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/workout" element={<WorkoutTrackerPage />} />
+        <Route path="/add" element={<LazyPage><AddMealPage /></LazyPage>} />
+        <Route path="/analysis" element={<LazyPage><AnalysisResultPage /></LazyPage>} />
+        <Route path="/history" element={<LazyPage><HistoryPage /></LazyPage>} />
+        <Route path="/fitness" element={<LazyPage><FitnessPage /></LazyPage>} />
+        <Route path="/paywall" element={<LazyPage><PaywallPage /></LazyPage>} />
+        <Route path="/profile" element={<LazyPage><ProfilePage /></LazyPage>} />
+        <Route path="/workout" element={<LazyPage><WorkoutTrackerPage /></LazyPage>} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

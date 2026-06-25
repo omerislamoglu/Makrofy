@@ -4,6 +4,8 @@ import type { MealType } from '../types/meal'
 import { calculateMacrosForWeight, sumMacros } from '../types/nutrition'
 import { matchFoodToCatalog, normalizeFoodText, searchFoodCatalog } from './foodSearch'
 import { getServingBaseAmount } from './foodCalculation'
+import type { AppLocale } from '../i18n'
+import { getStrings } from '../i18n'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -729,7 +731,7 @@ function detectMealTypeFromText(text: string): MealType | null {
 export function parseNaturalLanguageInput(
   text: string,
   catalog: FoodCatalogItem[],
-  locale?: 'tr' | 'en'
+  locale?: AppLocale
 ): ParseResult {
   if (!text.trim()) {
     return {
@@ -779,7 +781,7 @@ export function parseNaturalLanguageInput(
   const noItems = items.length === 0 && unparsedParts.length > 0
   const looksLikeNonsense = isNonsenseInput(text)
 
-  const isEN = locale === 'en'
+  const fp = getStrings((locale ?? 'en') as AppLocale).foodParser
 
   if ((allFailed || noItems) && looksLikeNonsense) {
     return {
@@ -788,9 +790,7 @@ export function parseNaturalLanguageInput(
       suggestedMealType,
       unparsedText: unparsedParts.join(', '),
       hasNonsenseInput: true,
-      nonsenseMessage: isEN
-        ? "This doesn't look like food. Please enter a food name (e.g. \"2 eggs, 1 slice bread\")."
-        : 'Bu bir yemek gibi görünmüyor. Lütfen yemek adı girin (örn. "2 yumurta, 1 dilim ekmek").',
+      nonsenseMessage: fp.nonsense,
     }
   }
 
@@ -803,9 +803,7 @@ export function parseNaturalLanguageInput(
       suggestedMealType,
       unparsedText: unparsedParts.join(', '),
       hasNonsenseInput: false,
-      nonsenseMessage: isEN
-        ? 'No matching food found. Try a different name.'
-        : 'Eşleşen yemek bulunamadı. Farklı bir isim deneyin.',
+      nonsenseMessage: fp.noMatch,
     }
   }
 

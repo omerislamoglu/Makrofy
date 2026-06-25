@@ -22,6 +22,25 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.omerislamoglu.makrofy</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>makrofy</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.googleusercontent.apps</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.93738909752-bluvguunvh0a0firj1vt2hurgk5cncl9</string>
+			</array>
+		</dict>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
@@ -67,10 +86,10 @@
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Makrofy, yemeklerinizin fotoğrafını çekerek kalori ve besin değerlerini analiz etmek için kameraya erişim ister.</string>
+	<string>Makrofy needs camera access to take food photos and estimate their nutritional values.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Makrofy needs motion data access to show your daily step count and calories burned from walking.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Makrofy, galerinizdeki yemek fotoğraflarını besin analizi için kullanabilmeniz için fotoğraf kitaplığınıza erişim ister.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Makrofy, analiz sonuçlarını fotoğraf kitaplığınıza kaydedebilmek için erişim ister.</string>
+	<string>Makrofy needs photo library access to let you pick food or program photos for nutritional analysis.</string>
 </dict>
 </plist>

@@ -499,7 +499,7 @@ const FOCUS_NAME: Record<string, Record<BodyFocus, string>> = {
 // ─── Ana üretici ────────────────────────────────────────────────────────────
 
 export function generateProgram(a: SurveyAnswers): WorkoutProgram {
-  const isEN = a.locale === 'en'
+  const isEN = a.locale !== 'tr'
   const lang = isEN ? 'en' : 'tr'
   const { split, dayPlans, schedule } = buildSplit(a.days, a.focus ?? 'balanced', isEN)
   const scheme = schemeFor(a.goal, a.intensity ?? 'high', isEN)

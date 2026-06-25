@@ -5,6 +5,9 @@ import { ScanLimit } from '../../types/subscription'
 import Badge from '../ui/Badge'
 import { useLocale } from '../../contexts/LocaleContext'
 
+// Scan packs live on their own dedicated paywall view.
+const SCAN_PACK_STATE = { state: { focus: 'scan' as const } }
+
 interface ScanLimitBannerProps {
   limit: ScanLimit
   isPro?: boolean
@@ -19,21 +22,28 @@ export default function ScanLimitBanner({ limit, isPro = false }: ScanLimitBanne
 
   if (limit.isLimited) {
     if (isPro) {
+      // Member ran out of daily scans → let them buy a scan pack (their only
+      // way to get more), rather than dead-ending on a static message.
       return (
-        <motion.div
+        <motion.button
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="w-full bg-zinc-900 border border-zinc-800/50 rounded-2xl p-5 text-center"
+          onClick={() => navigate('/paywall', SCAN_PACK_STATE)}
+          className="w-full bg-zinc-900 border border-zinc-800/50 rounded-2xl p-5 text-center hover:bg-zinc-800/80 active:scale-[0.99] transition-all duration-200"
         >
           <Lock size={24} className="mx-auto mb-3 text-zinc-500" />
           <p className="text-[14px] font-semibold text-zinc-200 mb-1">
             {s.proUsedTitle}
           </p>
-          <p className="text-[12px] text-zinc-500">
+          <p className="text-[12px] text-zinc-500 mb-4">
             {s.proUsedSubtitle}
           </p>
-        </motion.div>
+          <div className="inline-flex items-center gap-1.5 text-[12px] text-emerald-400 font-medium">
+            {strings.profile.buyScanPack}
+            <ChevronRight size={14} />
+          </div>
+        </motion.button>
       )
     }
 

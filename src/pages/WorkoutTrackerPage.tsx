@@ -600,6 +600,7 @@ function WeeklyLogView({
   const [loading, setLoading] = useState(true)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const saveStateIdleTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const dirtyRef = useRef<boolean>(false)
   const [creating, setCreating] = useState(false)
 
@@ -634,6 +635,14 @@ function WeeklyLogView({
     return () => { cancelled = true }
   }, [userId, weekId, currentMonday])
 
+  // Unmount'ta bekleyen tüm timer'ları temizle
+  useEffect(() => {
+    return () => {
+      if (saveTimeout.current) clearTimeout(saveTimeout.current)
+      if (saveStateIdleTimeout.current) clearTimeout(saveStateIdleTimeout.current)
+    }
+  }, [])
+
   // ── Auto-save ────────────────────────────────────────────────────────
   const autoSave = useCallback(async (data: WorkoutWeek) => {
     setSaveState('saving')
@@ -641,7 +650,11 @@ function WeeklyLogView({
       await saveWeek(userId, data)
       setSaveState('saved')
       dirtyRef.current = false
-      setTimeout(() => setSaveState('idle'), 1500)
+      if (saveStateIdleTimeout.current) clearTimeout(saveStateIdleTimeout.current)
+      saveStateIdleTimeout.current = setTimeout(() => {
+        setSaveState('idle')
+        saveStateIdleTimeout.current = null
+      }, 1500)
     } catch {
       setSaveState('idle')
     }
@@ -804,11 +817,25 @@ export default function WorkoutTrackerPage() {
   const [programLoading, setProgramLoading] = useState(true)
   const [mode, setMode] = useState<PageMode>('tracker')
   const [toast, setToast] = useState<string | null>(null)
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const showToast = (msg: string) => {
+  const showToast = useCallback((msg: string) => {
+    // Önceki bekleyen timeout'u iptal et — hızlı art arda çağrılarda orphan
+    // timer birikimini ve component unmount sonrası setState uyarılarını önler.
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current)
     setToast(msg)
-    setTimeout(() => setToast(null), 2000)
-  }
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(null)
+      toastTimeoutRef.current = null
+    }, 2000)
+  }, [])
+
+  // Component unmount'ta bekleyen toast timer'ını temizle
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current)
+    }
+  }, [])
 
   // ── Load program ─────────────────────────────────────────────────────
   useEffect(() => {

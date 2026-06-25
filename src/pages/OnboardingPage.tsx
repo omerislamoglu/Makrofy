@@ -6,29 +6,23 @@ import { useLocale } from '../contexts/LocaleContext'
 
 export default function OnboardingPage() {
   const navigate = useNavigate()
-  const { locale } = useLocale()
-  const isEN = locale === 'en'
+  const { strings } = useLocale()
+  const t = strings.onboarding
   const steps = [
     {
       icon: '📸',
-      title: isEN ? 'Scan with AI' : 'AI ile Tara',
-      description: isEN
-        ? 'Take a meal photo and get instant nutrition estimates.'
-        : 'Yemeğinin fotoğrafını çek, anında besin değerlerini öğren.',
+      title: t.slide1Title,
+      description: t.slide1Desc,
     },
     {
       icon: '📊',
-      title: isEN ? 'Know Your Macros' : 'Makrolarını Bil',
-      description: isEN
-        ? 'See protein, carbs, fat, and calories at a glance.'
-        : 'Protein, karbonhidrat, yağ ve kaloriyi tek bakışta gör.',
+      title: t.slide2Title,
+      description: t.slide2Desc,
     },
     {
       icon: '🎯',
-      title: isEN ? 'Stay Consistent' : 'Düzenli Kal',
-      description: isEN
-        ? 'Build better habits with simple, judgment-free tracking.'
-        : 'Basit ve yargısız takip ile daha iyi alışkanlıklar edin.',
+      title: t.slide3Title,
+      description: t.slide3Desc,
     },
   ]
 
@@ -79,7 +73,7 @@ export default function OnboardingPage() {
             fullWidth
             onClick={() => navigate('/auth')}
           >
-            {isEN ? 'Get Started' : 'Başla'}
+            {t.getStarted}
           </Button>
         </motion.div>
 
@@ -89,7 +83,7 @@ export default function OnboardingPage() {
           transition={{ delay: 0.9 }}
           className="text-[11px] text-zinc-700 mt-6"
         >
-          {isEN ? 'All nutrition values are estimates.' : 'Tüm besin değerleri tahminidir.'}
+          {t.disclaimer}
         </motion.p>
       </motion.div>
     </div>
