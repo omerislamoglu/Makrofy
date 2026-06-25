@@ -42,7 +42,7 @@ const config: CapacitorConfig = {
     },
   },
   ios: {
-    contentInset: 'always',
+    contentInset: 'never',
     backgroundColor: '#000000',
     preferredContentMode: 'mobile',
     scrollEnabled: true,
