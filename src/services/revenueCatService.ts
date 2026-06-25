@@ -671,7 +671,7 @@ export async function showPendingStoreMessages(): Promise<void> {
   if (!Capacitor.isNativePlatform()) return
   try {
     const { Purchases } = await import('@revenuecat/purchases-capacitor')
-    await Purchases.showStoreMessages()
+    await (Purchases as any).showStoreMessages()
   } catch {
     // Kritik değil; StoreKit kendi içinde yeniden dener.
   }
