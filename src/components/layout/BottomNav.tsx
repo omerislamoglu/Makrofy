@@ -58,7 +58,7 @@ export default function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 md:left-64 z-50"
+      className="flex-shrink-0"
       style={{ height: totalHeight }}
     >
       <div
